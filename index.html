@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- 브라우저 탭에 보이는 제목 -->
+  <title>테라가드 PPE 순찰 로봇 | 건설현장 보호구 착용 점검 피지컬 AI</title>
+  <meta name="description" content="현장을 스스로 순찰하며 작업자의 안전모·안전조끼 착용 여부를 Edge AI로 판정하고, 3초 안에 관리자에게 알리는 건설현장 보호구 착용 점검 로봇">
+
+  <!-- 글꼴: 영문 Manrope / Hanken Grotesk, 한글 Pretendard -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300..900&family=Manrope:wght@200..800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+
+  <!-- 디자인: Stitch '건설 안전 로봇 웹사이트' 테마 (stitch/terraguard.html) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#43271a", "primary-container": "#5c3d2e", "primary-fixed": "#ffdbcc", "primary-fixed-dim": "#eabda9",
+            "on-primary": "#ffffff",
+            "tertiary": "#4f2100", "tertiary-container": "#713200", "tertiary-fixed": "#ffdbc9", "on-tertiary-container": "#ff9756",
+            "surface": "#fcf9f3", "surface-dim": "#dcdad4", "surface-container-lowest": "#ffffff", "surface-container-low": "#f6f3ed",
+            "surface-container": "#f0eee8", "surface-container-high": "#ebe8e2", "surface-container-highest": "#e5e2dc",
+            "on-surface": "#1c1c18", "on-surface-variant": "#50443f",
+            "inverse-surface": "#31312d", "inverse-on-surface": "#f3f0ea",
+            "outline": "#82746e", "outline-variant": "#d4c3bc",
+            "error": "#ba1a1a", "on-error": "#ffffff", "error-container": "#ffdad6", "on-error-container": "#93000a",
+            "ok": "#2f6b3a"
+          },
+          borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "9999px" },
+          fontFamily: {
+            display: ["Manrope", "Pretendard", "sans-serif"],
+            body: ["Hanken Grotesk", "Pretendard", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; scroll-padding-top: 6rem; }
+    body { word-break: keep-all; }
+    .material-symbols-outlined { font-size: 1.25em; line-height: 1; vertical-align: middle; }
+    .label { font-family: "Hanken Grotesk", "Pretendard", sans-serif; font-size: .72rem; letter-spacing: .1em; font-weight: 600; text-transform: uppercase; }
+    a:focus-visible, button:focus-visible { outline: 3px solid #ff9756; outline-offset: 3px; }
+  </style>
+</head>
+<body class="bg-surface font-body text-on-surface antialiased">
+
+  <!-- ===== 상단 메뉴 ===== -->
+  <header class="fixed top-0 left-0 w-full z-50 bg-surface/90 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.05)]">
+    <div class="w-full bg-primary text-on-primary py-2 px-5 lg:px-16 flex items-center justify-between label">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-tertiary-fixed animate-pulse"></span>
+        <span>PPE COMPLIANCE INSPECTION ROBOT<span class="hidden sm:inline"> // 안전모 · 안전조끼 착용 상시 점검</span></span>
+      </div>
+      <div class="hidden md:flex items-center gap-6 text-primary-fixed-dim">
+        <span>EDGE AI ≥ 15 FPS</span>
+        <span>ALERT ≤ 3 SEC</span>
+      </div>
+    </div>
+    <div class="h-16 lg:h-20 max-w-7xl mx-auto px-5 lg:px-16 flex items-center justify-between">
+      <a href="#" class="flex items-center gap-3">
+        <span class="w-9 h-9 rounded-xl bg-primary-container text-on-primary flex items-center justify-center">
+          <span class="material-symbols-outlined">engineering</span>
+        </span>
+        <span class="flex flex-col">
+          <span class="font-display text-lg tracking-tight text-primary leading-none font-extrabold">TERRAGUARD</span>
+          <span class="label text-on-surface-variant !text-[0.62rem]">PHYSICAL AI ROBOTICS</span>
+        </span>
+      </a>
+      <nav class="hidden lg:flex items-center gap-6 text-[0.95rem] text-on-surface-variant">
+        <a class="hover:text-on-surface transition-colors" href="#problem">문제</a>
+        <a class="hover:text-on-surface transition-colors" href="#how">작동 방식</a>
+        <a class="hover:text-on-surface transition-colors" href="#features">주요 기능</a>
+        <a class="hover:text-on-surface transition-colors" href="#spec">제품 스펙</a>
+        <a class="hover:text-on-surface transition-colors" href="#kpi">성능 목표</a>
+        <a class="hover:text-on-surface transition-colors" href="#roi">도입 효과</a>
+      </nav>
+      <a href="#poc" class="inline-flex items-center gap-1 bg-primary-container text-on-primary hover:bg-primary text-sm px-4 py-2 rounded-lg transition-colors shadow-sm">
+        현장 실증 문의 <span class="material-symbols-outlined">arrow_forward</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="pt-[6.5rem] lg:pt-[7.5rem]">
+
+    <!-- ===== 첫 화면 ===== -->
+    <section class="bg-surface-container-low pt-10 pb-20 lg:pb-28">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="flex flex-wrap items-center gap-3 mb-6">
+          <span class="inline-flex items-center gap-2 px-4 py-1 bg-surface-container rounded label text-primary">
+            <span class="w-2 h-2 rounded-full bg-tertiary-container animate-ping"></span>
+            NEXT-GEN PHYSICAL AI SAFETY
+          </span>
+          <span class="label text-on-surface-variant">SYSTEM // AUTONOMOUS PPE PATROL UGV</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+          <div class="lg:col-span-6 flex flex-col gap-5">
+            <h1 class="font-display text-4xl sm:text-5xl lg:text-[3.4rem] text-primary font-bold tracking-tight leading-[1.15]">
+              <span class="block">안전모를 벗은 그 순간,</span>
+              <span class="block"><span class="text-tertiary-container">피지컬 AI</span>가 먼저 봅니다</span>
+            </h1>
+            <p class="text-lg text-on-surface-variant leading-relaxed">
+              테라가드 PPE 순찰 로봇은 건설현장을 스스로 돌며 작업자의 <strong class="text-on-surface">안전모·안전조끼 착용 여부</strong>를 로봇 안의 Edge AI로 판정합니다.
+              미착용을 발견하면 그 자리에서 음성과 경광등으로 안내하고, 3초 안에 위치와 증빙 사진을 관리자에게 보냅니다.
+            </p>
+            <div class="flex flex-wrap items-center gap-3 pt-2">
+              <a href="#how" class="inline-flex items-center gap-2 px-7 py-3.5 bg-primary-container text-on-primary hover:bg-primary font-display font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
+                작동 방식 보기 <span class="material-symbols-outlined">arrow_downward</span>
+              </a>
+              <a href="#roi" class="inline-flex items-center gap-2 px-6 py-3.5 bg-surface text-on-surface hover:bg-surface-container font-display font-semibold rounded-lg shadow-sm transition-all">
+                <span class="material-symbols-outlined text-primary">payments</span> 도입 효과 확인
+              </a>
+            </div>
+            <div class="grid grid-cols-3 gap-2 pt-4">
+              <div class="p-3 bg-surface rounded-lg">
+                <span class="font-display text-2xl text-primary font-bold block">≤ 3초</span>
+                <span class="text-xs text-on-surface-variant">미착용 확정 → 관리자 알림</span>
+              </div>
+              <div class="p-3 bg-surface rounded-lg">
+                <span class="font-display text-2xl text-primary font-bold block">15 FPS+</span>
+                <span class="text-xs text-on-surface-variant">로봇 내부 Edge AI 추론</span>
+              </div>
+              <div class="p-3 bg-surface rounded-lg">
+                <span class="font-display text-2xl text-primary font-bold block">4시간+</span>
+                <span class="text-xs text-on-surface-variant">1회 충전 연속 순찰</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-6 relative">
+            <div class="relative w-full aspect-[4/3] rounded-xl overflow-hidden shadow-2xl bg-surface-dim">
+              <img src="images/hero-robot.png" alt="해 질 녘 건설현장을 순찰하는 테라가드 안전 점검 로봇 컨셉 이미지" class="w-full h-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-inverse-surface/80 via-transparent to-transparent pointer-events-none"></div>
+              <div class="absolute top-3 left-3 right-3 flex items-center justify-between text-on-primary label bg-inverse-surface/60 backdrop-blur-md px-3 py-2 rounded-lg">
+                <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-tertiary-fixed animate-ping"></span>PTZ CAM // PATROL ACTIVE</span>
+                <span class="hidden sm:inline text-tertiary-fixed">ZONE 07 / 12</span>
+              </div>
+              <div class="absolute bottom-3 left-3 p-3 sm:p-4 bg-surface/95 backdrop-blur-md rounded-lg shadow-xl max-w-[46%]">
+                <div class="flex items-center gap-1.5 mb-1 label text-primary">
+                  <span class="material-symbols-outlined">verified_user</span> PPE CHECK
+                </div>
+                <p class="font-display text-2xl sm:text-3xl font-bold leading-none mb-1">≥ 95%</p>
+                <p class="text-xs text-on-surface-variant">미착용 판정 Recall 목표</p>
+              </div>
+              <div class="absolute bottom-3 right-3 p-3 sm:p-4 bg-inverse-surface text-inverse-on-surface rounded-lg shadow-xl max-w-[46%]">
+                <div class="flex items-center gap-1.5 mb-1 label text-tertiary-fixed">
+                  <span class="material-symbols-outlined">campaign</span> ON-SITE WARNING
+                </div>
+                <p class="font-display text-2xl sm:text-3xl font-bold text-on-tertiary-container leading-none mb-1">2~3m</p>
+                <p class="text-xs text-surface-dim">작업자 앞에서 정지 후 음성 안내</p>
+              </div>
+            </div>
+            <p class="mt-3 text-xs text-on-surface-variant">※ 이미지는 컨셉 시안입니다. 실제 제품은 4륜 UGV 플랫폼으로 개발됩니다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 핵심 목표 수치 ===== -->
+    <section class="bg-surface-container py-10">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <p class="label text-on-surface-variant mb-4">BUSINESS TARGET // 도입 6개월 시점 목표</p>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="flex flex-col gap-1 p-5 bg-surface rounded-lg shadow-sm">
+            <span class="label text-tertiary-container">PPE COMPLIANCE</span>
+            <div class="font-display text-2xl lg:text-3xl font-bold text-primary">88% → 97%</div>
+            <p class="text-sm text-on-surface-variant">현장 보호구 착용률</p>
+          </div>
+          <div class="flex flex-col gap-1 p-5 bg-surface rounded-lg shadow-sm">
+            <span class="label text-tertiary-container">WORKLOAD</span>
+            <div class="font-display text-2xl lg:text-3xl font-bold text-primary">70% 감소</div>
+            <p class="text-sm text-on-surface-variant">관리자 착용 점검·기록 시간</p>
+          </div>
+          <div class="flex flex-col gap-1 p-5 bg-surface rounded-lg shadow-sm">
+            <span class="label text-tertiary-container">RESPONSE</span>
+            <div class="font-display text-2xl lg:text-3xl font-bold text-primary">≤ 10분</div>
+            <p class="text-sm text-on-surface-variant">미착용 알림 → 시정 완료</p>
+          </div>
+          <div class="flex flex-col gap-1 p-5 bg-surface rounded-lg shadow-sm">
+            <span class="label text-tertiary-container">COVERAGE</span>
+            <div class="font-display text-2xl lg:text-3xl font-bold text-primary">일 4회+</div>
+            <p class="text-sm text-on-surface-variant">담당 구역당 점검 횟수</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 해결하려는 문제 ===== -->
+    <section id="problem" class="py-20 lg:py-28 bg-surface">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-12">
+          <span class="label text-tertiary-container">PROBLEM STATEMENT</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">미착용은 순찰과 순찰 사이,<br class="hidden sm:block"> 짧은 틈에 일어납니다</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">
+            보호구 미착용은 건설현장 사고에서 반복적으로 지적되는 원인입니다. 특히 안전모 미착용은 추락·낙하물 사고 때 머리 중상으로 이어집니다.
+            작업 구역이 10곳이 넘는 대형 현장에서 안전관리자 2~3명이 모든 작업자를 계속 지켜볼 수는 없습니다.
+            "잠깐 벗은 상태", "순찰자가 지나간 직후"처럼 짧은 틈은 정기 순찰로 잡아내기 어렵습니다.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="p-6 bg-surface-container-low rounded-xl">
+            <span class="material-symbols-outlined text-primary text-3xl">directions_walk</span>
+            <h3 class="font-display font-bold text-lg mt-3 mb-2">관리자 도보 순찰</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed">순찰 사이에 공백이 생기고, 관리자 시야 밖 구역은 점검할 수 없습니다. 기록도 수기로 남습니다.</p>
+          </div>
+          <div class="p-6 bg-surface-container-low rounded-xl">
+            <span class="material-symbols-outlined text-primary text-3xl">door_front</span>
+            <h3 class="font-display font-bold text-lg mt-3 mb-2">출입구 게이트 점검</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed">출입할 때만 확인할 수 있어, 작업 중 보호구를 벗는 경우는 알 수 없습니다.</p>
+          </div>
+          <div class="p-6 bg-surface-container-low rounded-xl">
+            <span class="material-symbols-outlined text-primary text-3xl">videocam</span>
+            <h3 class="font-display font-bold text-lg mt-3 mb-2">고정식 CCTV</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed">사각지대가 있고, 공정이 바뀔 때마다 설치 위치를 옮겨야 합니다. 사람이 직접 보지 않으면 쓸모가 없습니다.</p>
+          </div>
+          <div class="p-6 bg-surface-container-low rounded-xl">
+            <span class="material-symbols-outlined text-primary text-3xl">sensors</span>
+            <h3 class="font-display font-bold text-lg mt-3 mb-2">센서 내장 스마트 안전모</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed">모든 안전모를 바꿔야 해 단가 부담이 크고, 조끼 같은 다른 보호구는 확인할 수 없습니다.</p>
+          </div>
+        </div>
+
+        <div class="mt-10 p-6 lg:p-8 bg-primary text-on-primary rounded-xl grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+          <div class="lg:col-span-4">
+            <span class="label text-tertiary-fixed">WHY AI</span>
+            <h3 class="font-display text-2xl font-bold mt-1">왜 AI가 필요한가요?</h3>
+          </div>
+          <ul class="lg:col-span-8 space-y-3 text-primary-fixed">
+            <li class="flex gap-3"><span class="material-symbols-outlined text-tertiary-fixed">check</span><span>안전모·조끼의 색상, 모양, 착용 각도, 역광·분진·비 같은 조건이 제각각이라 색상 필터 같은 규칙 기반 영상 처리로는 안정적으로 판별하기 어렵습니다.</span></li>
+            <li class="flex gap-3"><span class="material-symbols-outlined text-tertiary-fixed">check</span><span>"사람의 머리 위치에 안전모가 없다"는 판단은 사람 검출과 보호구 검출을 공간적으로 연결하는 딥러닝 객체 인식이 필요합니다.</span></li>
+            <li class="flex gap-3"><span class="material-symbols-outlined text-tertiary-fixed">check</span><span>영상을 모두 서버로 보내면 지연과 통신비가 커집니다. 그래서 로봇 안에서 Edge AI로 추론하고 이벤트만 전송합니다.</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 작동 방식: 감지 → 판단 → 행동 ===== -->
+    <section id="how" class="py-20 lg:py-28 bg-surface-container-low">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-12">
+          <span class="label text-tertiary-container">HOW IT WORKS</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">감지하고, 판단하고, 행동합니다</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">설치 하루면 순찰을 시작합니다. 이후 로봇은 정해진 경로를 반복해서 돌며 같은 사이클을 스스로 수행합니다.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div class="p-7 bg-surface rounded-xl shadow-sm flex flex-col">
+            <div class="flex items-center justify-between mb-5">
+              <span class="w-11 h-11 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">1</span>
+              <span class="label text-on-surface-variant">SENSE</span>
+            </div>
+            <h3 class="font-display text-2xl font-bold mb-3">감지</h3>
+            <p class="text-on-surface-variant leading-relaxed">로봇이 웨이포인트를 따라 자율 주행하며 PTZ RGB 카메라로 1080p, 15 FPS 이상의 영상을 받습니다. 구역마다 멈춰 좌우를 훑은 뒤 이동합니다. LiDAR는 주행과 장애물 회피에만 씁니다.</p>
+          </div>
+          <div class="p-7 bg-surface rounded-xl shadow-sm flex flex-col">
+            <div class="flex items-center justify-between mb-5">
+              <span class="w-11 h-11 rounded-full bg-tertiary-container text-on-primary font-display font-bold flex items-center justify-center">2</span>
+              <span class="label text-on-surface-variant">THINK</span>
+            </div>
+            <h3 class="font-display text-2xl font-bold mb-3">판단</h3>
+            <p class="text-on-surface-variant leading-relaxed">Edge AI가 작업자·안전모·조끼를 검출하고, 작업자마다 추적 ID를 붙입니다. 머리 영역에 안전모가, 상체에 조끼가 있는지 판정합니다. 오판을 줄이려고 3~10m 거리의 작업자만 판정하며, <strong class="text-on-surface">연속 5프레임</strong> 이상 미착용이면 이벤트로 확정합니다.</p>
+          </div>
+          <div class="p-7 bg-surface rounded-xl shadow-sm flex flex-col">
+            <div class="flex items-center justify-between mb-5">
+              <span class="w-11 h-11 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">3</span>
+              <span class="label text-on-surface-variant">ACT</span>
+            </div>
+            <h3 class="font-display text-2xl font-bold mb-3">행동</h3>
+            <p class="text-on-surface-variant leading-relaxed">작업자 2~3m 앞에 멈춰 경광등을 켜고 "안전모를 착용해 주세요"라고 안내합니다. 동시에 MQTT로 이벤트를 보내 관리자에게 알립니다. <strong class="text-on-surface">30초 뒤 다시 촬영</strong>해 착용을 확인하고 순찰을 이어갑니다.</p>
+          </div>
+        </div>
+
+        <!-- 6단계 사용자 시나리오 -->
+        <div class="mt-14">
+          <p class="label text-on-surface-variant mb-5">USER SCENARIO // 대형 아파트 신축 현장, 안전관리자 1명이 12개 구역 담당</p>
+          <ol class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            <li class="p-4 bg-surface rounded-lg">
+              <span class="label text-tertiary-container">STEP 01</span>
+              <h4 class="font-display font-bold mt-1 mb-1">설치</h4>
+              <p class="text-sm text-on-surface-variant">도면 업로드, 순찰 경로 1회 주행 저장, 점검 시간대 설정</p>
+            </li>
+            <li class="p-4 bg-surface rounded-lg">
+              <span class="label text-tertiary-container">STEP 02</span>
+              <h4 class="font-display font-bold mt-1 mb-1">데이터 수집</h4>
+              <p class="text-sm text-on-surface-variant">자율 순찰하며 PTZ 카메라로 실시간 영상 입력</p>
+            </li>
+            <li class="p-4 bg-surface rounded-lg">
+              <span class="label text-tertiary-container">STEP 03</span>
+              <h4 class="font-display font-bold mt-1 mb-1">분석</h4>
+              <p class="text-sm text-on-surface-variant">작업자·보호구 검출, 추적 ID 부여, 착용 판정</p>
+            </li>
+            <li class="p-4 bg-surface rounded-lg">
+              <span class="label text-tertiary-container">STEP 04</span>
+              <h4 class="font-display font-bold mt-1 mb-1">판단 결과</h4>
+              <p class="text-sm text-on-surface-variant">등급·위치·증빙 이미지로 이벤트 생성, 10분간 중복 억제</p>
+            </li>
+            <li class="p-4 bg-surface rounded-lg">
+              <span class="label text-tertiary-container">STEP 05</span>
+              <h4 class="font-display font-bold mt-1 mb-1">제어</h4>
+              <p class="text-sm text-on-surface-variant">정지 → 경광등·음성 안내 → 알림 → 30초 후 재확인</p>
+            </li>
+            <li class="p-4 bg-surface rounded-lg">
+              <span class="label text-tertiary-container">STEP 06</span>
+              <h4 class="font-display font-bold mt-1 mb-1">후속 조치</h4>
+              <p class="text-sm text-on-surface-variant">대시보드에서 조치 상태 기록, 주간 착용률로 TBM 교육</p>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 로봇 시야 시뮬레이션 ===== -->
+    <section class="py-20 lg:py-28 bg-inverse-surface text-inverse-on-surface">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-10">
+          <div>
+            <span class="label text-tertiary-fixed">ON-DEVICE VISION</span>
+            <h2 class="font-display text-3xl lg:text-5xl font-bold tracking-tight text-surface mt-2">로봇의 눈으로 본 현장</h2>
+          </div>
+          <p class="text-surface-dim max-w-md">로봇 안의 Edge AI는 작업자마다 추적 ID를 붙이고, 머리와 상체 영역에서 보호구 착용 여부를 판정합니다. 증빙 이미지에는 얼굴 블러가 적용됩니다.</p>
+        </div>
+
+        <div class="relative w-full aspect-[4/3] sm:aspect-[16/9] lg:aspect-[21/9] rounded-xl overflow-hidden bg-primary-container shadow-2xl">
+          <div class="absolute inset-0 bg-cover bg-center opacity-60" style="background-image:url('images/site-view.png')" role="img" aria-label="로봇 시점에서 본 건설현장 시뮬레이션 화면"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-inverse-surface via-transparent to-inverse-surface/50 pointer-events-none"></div>
+
+          <div class="absolute inset-3 sm:inset-6 flex flex-col justify-between">
+            <div class="flex items-center justify-between label text-tertiary-fixed">
+              <span class="bg-primary/80 px-2 py-1 rounded">PTZ RGB // 1080p · 15 FPS</span>
+              <span class="hidden sm:inline bg-primary/80 px-2 py-1 rounded">JUDGE RANGE 3–10 m</span>
+            </div>
+
+            <!-- 착용 확인된 작업자 -->
+            <div class="absolute top-[22%] left-[8%] sm:left-[18%] w-[34%] sm:w-[150px] h-[46%] sm:h-[200px] border-2 border-tertiary-fixed/80 rounded bg-tertiary-fixed/10 flex flex-col justify-between p-1.5">
+              <div class="flex items-center justify-between label !text-[0.6rem] bg-tertiary-container text-on-primary px-1.5 py-0.5 rounded">
+                <span>ID 014</span><span>6.2m</span>
+              </div>
+              <div class="space-y-1">
+                <span class="label !text-[0.6rem] block px-1 bg-surface/90 text-ok rounded">HELMET ✓</span>
+                <span class="label !text-[0.6rem] block px-1 bg-surface/90 text-ok rounded">VEST ✓</span>
+              </div>
+            </div>
+
+            <!-- 미착용 작업자 -->
+            <div class="absolute top-[26%] right-[8%] sm:right-[22%] w-[38%] sm:w-[170px] h-[44%] sm:h-[190px] border-2 border-error rounded bg-error/15 flex flex-col justify-between p-1.5 animate-pulse">
+              <div class="flex items-center justify-between label !text-[0.6rem] bg-error text-on-error px-1.5 py-0.5 rounded">
+                <span>ID 027</span><span>경고</span>
+              </div>
+              <div class="space-y-1">
+                <span class="label !text-[0.6rem] block px-1 bg-surface/90 text-error rounded">HELMET ✕ (5/5 FRAMES)</span>
+                <span class="label !text-[0.6rem] block px-1 bg-surface/90 text-ok rounded">VEST ✓</span>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2 label !text-[0.62rem] sm:!text-[0.72rem] bg-inverse-surface/85 backdrop-blur-md p-2.5 sm:p-3 rounded-lg">
+              <div class="flex items-center gap-4">
+                <span class="text-tertiary-fixed">MODE: PATROL</span>
+                <span class="hidden sm:inline">ZONE 07</span>
+                <span class="hidden md:inline">BATTERY 78%</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-error animate-ping"></span>
+                <span class="text-error-container">EVENT 확정 → 관리자 알림 송출</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="mt-3 text-xs text-surface-dim">※ 판정 화면을 설명하기 위한 시뮬레이션입니다.</p>
+      </div>
+    </section>
+
+    <!-- ===== 주요 기능 ===== -->
+    <section id="features" class="py-20 lg:py-28 bg-surface">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-12">
+          <span class="label text-tertiary-container">CORE CAPABILITIES</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">점검부터 조치 기록까지, 한 대로</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">순찰하고, 판정하고, 알리고, 기록하는 일을 로봇과 웹 대시보드가 나눠 맡습니다.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-5">
+          <div class="lg:col-span-7 p-7 lg:p-9 bg-surface-container-low rounded-xl shadow-sm flex flex-col justify-between gap-6">
+            <div>
+              <div class="flex items-center justify-between mb-4">
+                <span class="p-2 bg-primary-container text-on-primary rounded-lg"><span class="material-symbols-outlined text-2xl">route</span></span>
+                <span class="label text-on-surface-variant">MODULE // NAV</span>
+              </div>
+              <h3 class="font-display text-2xl font-bold mb-2">자율 순찰 주행</h3>
+              <p class="text-on-surface-variant leading-relaxed">웨이포인트 기반으로 같은 경로를 반복 순찰합니다. 장애물을 피해 가며, 배터리가 떨어지면 충전 도크로 스스로 돌아갑니다. ROS 2 Nav2와 SLAM Toolbox로 실내외를 주행합니다.</p>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div class="p-3 bg-surface rounded-lg"><span class="label text-on-surface-variant block">완료율</span><span class="font-display text-xl font-bold text-primary">≥ 95%</span></div>
+              <div class="p-3 bg-surface rounded-lg"><span class="label text-on-surface-variant block">가동률</span><span class="font-display text-xl font-bold text-primary">≥ 95%</span></div>
+              <div class="p-3 bg-surface rounded-lg"><span class="label text-on-surface-variant block">주행 경사</span><span class="font-display text-xl font-bold text-primary">15°</span></div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-5 p-7 lg:p-9 bg-surface-container rounded-xl shadow-sm flex flex-col justify-between gap-6">
+            <div>
+              <div class="flex items-center justify-between mb-4">
+                <span class="p-2 bg-tertiary-container text-on-primary rounded-lg"><span class="material-symbols-outlined text-2xl">visibility</span></span>
+                <span class="label text-on-surface-variant">EDGE AI // JETSON ORIN NX</span>
+              </div>
+              <h3 class="font-display text-2xl font-bold mb-2">Edge AI 착용 판정</h3>
+              <p class="text-on-surface-variant leading-relaxed">YOLO 기반 3클래스(작업자·안전모·조끼) 검출, ByteTrack 추적, 공간 관계 규칙 엔진으로 판정합니다. 판정 근거를 설명할 수 있습니다.</p>
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between p-2.5 bg-surface rounded-lg text-sm">
+                <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-error"></span>안전모 미착용</span>
+                <span class="font-bold text-error">경고</span>
+              </div>
+              <div class="flex items-center justify-between p-2.5 bg-surface rounded-lg text-sm">
+                <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-on-tertiary-container"></span>조끼 미착용</span>
+                <span class="font-bold text-tertiary-container">주의</span>
+              </div>
+              <div class="flex items-center justify-between p-2.5 bg-surface rounded-lg text-sm">
+                <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-error"></span>둘 다 미착용</span>
+                <span class="font-bold text-error">경고</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-5 p-7 lg:p-9 bg-surface-container rounded-xl shadow-sm flex flex-col justify-between gap-6">
+            <div>
+              <div class="flex items-center justify-between mb-4">
+                <span class="p-2 bg-primary text-on-primary rounded-lg"><span class="material-symbols-outlined text-2xl">campaign</span></span>
+                <span class="label text-on-surface-variant">INTERVENTION</span>
+              </div>
+              <h3 class="font-display text-2xl font-bold mb-2">현장 즉시 경고와 재확인</h3>
+              <p class="text-on-surface-variant leading-relaxed">작업자 가까이에서 경광등과 음성으로 착용을 안내하고, 30초 뒤 다시 촬영합니다. 착용이 확인되면 이벤트가 자동으로 종결됩니다.</p>
+            </div>
+            <div class="p-4 bg-surface rounded-lg flex items-center gap-3">
+              <span class="material-symbols-outlined text-primary text-2xl">autorenew</span>
+              <div>
+                <span class="font-display font-bold block">정지 → 경고 → 알림 → 재촬영</span>
+                <span class="text-sm text-on-surface-variant">미개선 시 관리자가 현장 시정 지시</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-7 p-7 lg:p-9 bg-surface-container-low rounded-xl shadow-sm flex flex-col justify-between gap-6">
+            <div>
+              <div class="flex items-center justify-between mb-4">
+                <span class="p-2 bg-tertiary-container text-on-primary rounded-lg"><span class="material-symbols-outlined text-2xl">notifications_active</span></span>
+                <span class="label text-on-surface-variant">ALERT & DASHBOARD</span>
+              </div>
+              <h3 class="font-display text-2xl font-bold mb-2">관리자 알림과 웹 대시보드</h3>
+              <p class="text-on-surface-variant leading-relaxed">카카오 알림톡·문자·웹 푸시로 위치, 등급, 증빙 사진을 보냅니다. 확인하지 않으면 한 번 더 알립니다. 대시보드에서 로봇 상태와 이벤트를 보고 "확인 → 조치중 → 조치완료"로 기록합니다.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-sm">
+              <span class="px-3 py-1.5 bg-surface rounded-lg">확인</span>
+              <span class="material-symbols-outlined text-outline">chevron_right</span>
+              <span class="px-3 py-1.5 bg-surface rounded-lg">조치중</span>
+              <span class="material-symbols-outlined text-outline">chevron_right</span>
+              <span class="px-3 py-1.5 bg-primary-container text-on-primary rounded-lg">조치완료</span>
+            </div>
+          </div>
+
+          <div class="lg:col-span-6 p-7 bg-surface-container-low rounded-xl shadow-sm">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="material-symbols-outlined text-primary text-2xl">bar_chart</span>
+              <h3 class="font-display text-xl font-bold">착용률 리포트</h3>
+            </div>
+            <p class="text-on-surface-variant leading-relaxed">구역·시간대·협력사별 착용률을 일간·주간 리포트로 자동 생성합니다. 작업 전 안전회의(TBM) 교육 자료로 바로 쓸 수 있습니다.</p>
+          </div>
+          <div class="lg:col-span-6 p-7 bg-surface-container-low rounded-xl shadow-sm">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="material-symbols-outlined text-primary text-2xl">shield_person</span>
+              <h3 class="font-display text-xl font-bold">개인정보 보호와 안정성</h3>
+            </div>
+            <p class="text-on-surface-variant leading-relaxed">얼굴 인식은 하지 않고 위치·시각으로만 기록합니다. 증빙 이미지는 얼굴을 블러 처리해 90일 후 자동 삭제합니다. 네트워크가 끊겨도 로컬에 저장했다가 다시 보내 이벤트를 잃지 않습니다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 제품 스펙 / 기술 스택 ===== -->
+    <section id="spec" class="py-20 lg:py-28 bg-surface-container-low">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-12">
+          <span class="label text-primary">HARDWARE & SOFTWARE</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">현장을 견디는 하드웨어, 검증된 소프트웨어</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">비포장·분진 환경에서 가격, 배터리, 유지보수 면에서 현실적인 구성을 골랐습니다.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+            <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center text-primary mb-4"><span class="material-symbols-outlined text-2xl">agriculture</span></div>
+            <span class="label text-on-surface-variant">PLATFORM</span>
+            <h3 class="font-display text-lg font-bold mt-1 mb-2">견고형 4륜 UGV</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed mb-4">IP65 이상 방진·방수, 15° 경사 주행. 모터·비상정지(E-Stop)·경광등은 STM32 MCU가 상위 컴퓨터와 분리해 실시간 제어합니다.</p>
+            <div class="mt-auto label text-primary">IP65+ // E-STOP</div>
+          </div>
+          <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+            <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center text-primary mb-4"><span class="material-symbols-outlined text-2xl">center_focus_strong</span></div>
+            <span class="label text-on-surface-variant">CAMERA</span>
+            <h3 class="font-display text-lg font-bold mt-1 mb-2">1080p PTZ RGB 카메라</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed mb-4">저조도·역광에 강한 Sony STARVIS 계열 센서. PTZ로 멀리 있는 작업자도 확대해서 촬영합니다.</p>
+            <div class="mt-auto label text-primary">1080p // 15 FPS+</div>
+          </div>
+          <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+            <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center text-primary mb-4"><span class="material-symbols-outlined text-2xl">radar</span></div>
+            <span class="label text-on-surface-variant">NAVIGATION</span>
+            <h3 class="font-display text-lg font-bold mt-1 mb-2">3D LiDAR · IMU · 초음파</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Ouster/Livox 계열 3D LiDAR로 실내외 SLAM과 장애물 회피를 합니다. 보호구 판정에는 쓰지 않습니다.</p>
+            <div class="mt-auto label text-primary">SLAM // OBSTACLE AVOID</div>
+          </div>
+          <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+            <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center text-primary mb-4"><span class="material-symbols-outlined text-2xl">memory</span></div>
+            <span class="label text-on-surface-variant">EDGE AI</span>
+            <h3 class="font-display text-lg font-bold mt-1 mb-2">NVIDIA Jetson Orin NX 16GB</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed mb-4">TensorRT FP16으로 최적화한 모델을 로봇 안에서 실행합니다. 영상은 내보내지 않고 이벤트만 전송합니다.</p>
+            <div class="mt-auto label text-primary">TENSORRT FP16 // ≥ 15 FPS</div>
+          </div>
+        </div>
+
+        <div class="mt-12 bg-surface rounded-xl p-5 lg:p-7 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-display text-xl lg:text-2xl font-bold text-primary">소프트웨어 · 인프라 스택</h3>
+            <span class="label bg-surface-container px-3 py-1 rounded">PRD v1.1</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[560px] text-left text-sm">
+              <thead>
+                <tr class="bg-surface-container label">
+                  <th class="p-3">구성</th>
+                  <th class="p-3">사용 기술</th>
+                  <th class="p-3">선정 이유</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-outline-variant/40">
+                <tr><td class="p-3 font-semibold text-primary">로봇 SW</td><td class="p-3">ROS 2 Humble, Nav2, SLAM Toolbox</td><td class="p-3 text-on-surface-variant">자율주행 표준 스택, 개발 인력 확보 용이</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">AI 모델</td><td class="p-3">YOLOv8/YOLO11 3클래스 + ByteTrack + 규칙 엔진</td><td class="p-3 text-on-surface-variant">실시간성과 정확도의 균형, 중복 알림 방지, 판정 근거 설명</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">학습 · 배포</td><td class="p-3">PyTorch, ONNX → TensorRT, CVAT, MLflow, OTA</td><td class="p-3 text-on-surface-variant">학습-변환-배포 파이프라인 표준화, 원격 업데이트</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">통신</td><td class="p-3">5G/LTE + MQTT(TLS), 현장 Wi-Fi 6 메쉬</td><td class="p-3 text-on-surface-variant">저대역폭·불안정한 망에 적합</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">서버 · DB</td><td class="p-3">AWS(EC2/EKS, S3), Docker, PostgreSQL, Redis</td><td class="p-3 text-on-surface-variant">이벤트는 관계형 DB, 증빙 이미지는 S3에 분리 저장</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">대시보드 · 알림</td><td class="p-3">React + TypeScript, Grafana, 카카오 알림톡/SMS, 웹 푸시</td><td class="p-3 text-on-surface-variant">앱 설치 없이 PC·태블릿에서 접근, 가장 빨리 확인하는 채널</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 성능 목표 (KPI) ===== -->
+    <section id="kpi" class="py-20 lg:py-28 bg-surface">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-12">
+          <span class="label text-tertiary-container">SUCCESS METRICS</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">숫자로 약속하는 성능 목표</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">3~10m 거리의 현장 검증셋 2,000장 이상과 주간·역광·우천·분진 시나리오 테스트로 측정합니다.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div class="p-6 lg:p-8 bg-surface-container-low rounded-xl">
+            <h3 class="font-display text-xl font-bold mb-5 flex items-center gap-2"><span class="material-symbols-outlined text-primary">neurology</span>AI 성능</h3>
+            <dl class="divide-y divide-outline-variant/50">
+              <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">작업자 검출 Recall</dt><dd class="font-display font-bold text-primary">≥ 97%</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">안전모 검출 mAP@0.5</dt><dd class="font-display font-bold text-primary">≥ 0.93</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">안전조끼 검출 mAP@0.5</dt><dd class="font-display font-bold text-primary">≥ 0.90</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">미착용 판정 Recall / Precision</dt><dd class="font-display font-bold text-primary">≥ 95% / ≥ 90%</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">오탐 알림</dt><dd class="font-display font-bold text-primary">≤ 3건 / 로봇 / 일</dd></div>
+            </dl>
+          </div>
+          <div class="p-6 lg:p-8 bg-surface-container-low rounded-xl">
+            <h3 class="font-display text-xl font-bold mb-5 flex items-center gap-2"><span class="material-symbols-outlined text-primary">settings_suggest</span>시스템 · 운영</h3>
+            <dl class="divide-y divide-outline-variant/50">
+              <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">이벤트 확정 → 알림 도달</dt><dd class="font-display font-bold text-primary">≤ 3초</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">Edge 추론 속도</dt><dd class="font-display font-bold text-primary">≥ 15 FPS</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">1회 충전 연속 운용</dt><dd class="font-display font-bold text-primary">≥ 4시간</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">네트워크 단절 시 이벤트 유실</dt><dd class="font-display font-bold text-primary">0%</dd></div>
+              <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">관리자 알림 확인 응답 (중앙값)</dt><dd class="font-display font-bold text-primary">≤ 5분</dd></div>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 도입 효과 (ROI) ===== -->
+    <section id="roi" class="py-20 lg:py-28 bg-surface-container-low">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-12">
+          <span class="label text-tertiary-container">BUSINESS VALUE</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">약 21개월이면 투자를 회수합니다</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">대형 신축 현장 1곳에서 로봇 2대를 3년간 운용하는 기준입니다.</p>
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="p-5 bg-surface rounded-xl shadow-sm">
+            <span class="label text-on-surface-variant">초기 투자비</span>
+            <p class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1">2.32억 원</p>
+          </div>
+          <div class="p-5 bg-surface rounded-xl shadow-sm">
+            <span class="label text-on-surface-variant">월 순 절감액</span>
+            <p class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1">1,100만 원</p>
+          </div>
+          <div class="p-5 bg-primary text-on-primary rounded-xl shadow-sm">
+            <span class="label text-tertiary-fixed">연간 ROI</span>
+            <p class="font-display text-2xl lg:text-3xl font-bold mt-1">약 56.9%</p>
+          </div>
+          <div class="p-5 bg-primary text-on-primary rounded-xl shadow-sm">
+            <span class="label text-tertiary-fixed">투자 회수기간</span>
+            <p class="font-display text-2xl lg:text-3xl font-bold mt-1">약 21.1개월</p>
+          </div>
+        </div>
+
+        <div class="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div class="p-6 lg:p-8 bg-surface rounded-xl shadow-sm">
+            <h3 class="font-display text-xl font-bold mb-5">월 절감액 1,800만 원의 구성</h3>
+            <ul class="space-y-4 text-sm">
+              <li>
+                <div class="flex justify-between mb-1"><span>점검·순찰 인건비 절감</span><span class="font-bold">700만</span></div>
+                <div class="h-2 bg-surface-container rounded-full"><div class="h-2 bg-primary-container rounded-full" style="width:38.9%"></div></div>
+              </li>
+              <li>
+                <div class="flex justify-between mb-1"><span>미착용 관련 재해 손실 감소</span><span class="font-bold">700만</span></div>
+                <div class="h-2 bg-surface-container rounded-full"><div class="h-2 bg-primary-container rounded-full" style="width:38.9%"></div></div>
+              </li>
+              <li>
+                <div class="flex justify-between mb-1"><span>점검 기록·증빙 문서화 공수 절감</span><span class="font-bold">200만</span></div>
+                <div class="h-2 bg-surface-container rounded-full"><div class="h-2 bg-primary-container rounded-full" style="width:11.1%"></div></div>
+              </li>
+              <li>
+                <div class="flex justify-between mb-1"><span>감독기관 지적·시정 비용 감소</span><span class="font-bold">200만</span></div>
+                <div class="h-2 bg-surface-container rounded-full"><div class="h-2 bg-primary-container rounded-full" style="width:11.1%"></div></div>
+              </li>
+            </ul>
+            <p class="mt-5 text-sm text-on-surface-variant">월 운영비 700만 원(통신·클라우드·유지보수·재학습 등)을 빼면 월 순 절감액은 1,100만 원입니다.</p>
+          </div>
+          <div class="p-6 lg:p-8 bg-surface rounded-xl shadow-sm">
+            <h3 class="font-display text-xl font-bold mb-5">시나리오별 투자 회수기간</h3>
+            <ul class="space-y-4 text-sm">
+              <li>
+                <div class="flex justify-between mb-1"><span>낙관 (절감액 +20%)</span><span class="font-bold">약 15.9개월</span></div>
+                <div class="h-2 bg-surface-container rounded-full"><div class="h-2 bg-ok rounded-full" style="width:50.6%"></div></div>
+              </li>
+              <li>
+                <div class="flex justify-between mb-1"><span>기준</span><span class="font-bold">약 21.1개월</span></div>
+                <div class="h-2 bg-surface-container rounded-full"><div class="h-2 bg-primary-container rounded-full" style="width:67.2%"></div></div>
+              </li>
+              <li>
+                <div class="flex justify-between mb-1"><span>비관 (절감액 −20%)</span><span class="font-bold">약 31.4개월</span></div>
+                <div class="h-2 bg-surface-container rounded-full"><div class="h-2 bg-tertiary-container rounded-full" style="width:100%"></div></div>
+              </li>
+            </ul>
+            <p class="mt-5 text-sm text-on-surface-variant">AI 모델 개발비(6,000만 원)를 3개 이상 현장에 나누면 회수기간이 약 15개월 안팎으로 줄어들 수 있습니다. 3년 누적 순이익은 약 1.64억 원입니다.</p>
+          </div>
+        </div>
+        <p class="mt-4 text-xs text-on-surface-variant">※ 절감액 중 재해 손실 감소분 등 일부는 추정치이며, PoC 실측으로 검증할 예정입니다.</p>
+      </div>
+    </section>
+
+    <!-- ===== 범위 ===== -->
+    <section class="py-20 bg-surface">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16 grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="p-6 lg:p-8 bg-surface-container-low rounded-xl">
+          <span class="label text-tertiary-container">IN SCOPE</span>
+          <h3 class="font-display text-2xl font-bold mt-1 mb-4">1차 제품에 포함</h3>
+          <ul class="space-y-2 text-on-surface-variant">
+            <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>작업자·안전모·안전조끼 실시간 검출과 착용 판정</li>
+            <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>자율 순찰, 장애물 회피, 충전 도크 자동 복귀</li>
+            <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>현장 경고 방송·경광등, 30초 후 재확인</li>
+            <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>관리자 알림, 웹 대시보드, 일간·주간 리포트</li>
+            <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>오프라인 버퍼링, OTA 소프트웨어·모델 업데이트</li>
+          </ul>
+        </div>
+        <div class="p-6 lg:p-8 bg-surface-container-low rounded-xl">
+          <span class="label text-on-surface-variant">NEXT PHASE</span>
+          <h3 class="font-display text-2xl font-bold mt-1 mb-4">2차 개발 이후</h3>
+          <ul class="space-y-2 text-on-surface-variant">
+            <li class="flex gap-2"><span class="material-symbols-outlined text-outline">schedule</span>안전화·장갑·보안경·안전대(하네스) 점검</li>
+            <li class="flex gap-2"><span class="material-symbols-outlined text-outline">schedule</span>외국인 근로자를 위한 다국어 경고 방송</li>
+            <li class="flex gap-2"><span class="material-symbols-outlined text-outline">schedule</span>개구부·중장비 근접·화재 등 환경 위험 감지</li>
+            <li class="flex gap-2"><span class="material-symbols-outlined text-outline">block</span>얼굴 인식을 통한 개인 식별은 하지 않습니다</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 현장 실증(PoC) ===== -->
+    <section id="poc" class="py-20 lg:py-28 bg-surface-container-low">
+      <div class="max-w-5xl mx-auto px-5 lg:px-16">
+        <div class="bg-surface rounded-xl shadow-xl overflow-hidden">
+          <div class="p-8 lg:p-12 bg-primary text-on-primary">
+            <span class="label text-tertiary-fixed">FIELD PoC PROGRAM</span>
+            <h2 class="font-display text-3xl lg:text-4xl font-bold tracking-tight mt-2">3개월 현장 실증으로 시작합니다</h2>
+            <p class="text-primary-fixed-dim max-w-2xl mt-3">로봇 1대를 현장 1곳에 배치해 성능과 절감 효과를 직접 측정합니다. 아래 기준을 달성하면 본 도입으로 넘어갑니다.</p>
+          </div>
+          <div class="p-8 lg:p-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <span class="material-symbols-outlined text-primary text-3xl">target</span>
+              <h3 class="font-display font-bold text-lg mt-2 mb-1">판정 성능 검증</h3>
+              <p class="text-sm text-on-surface-variant">미착용 판정 Recall 95% 이상, 오탐 하루 3건 이하</p>
+            </div>
+            <div>
+              <span class="material-symbols-outlined text-primary text-3xl">monitoring</span>
+              <h3 class="font-display font-bold text-lg mt-2 mb-1">절감 효과 실측</h3>
+              <p class="text-sm text-on-surface-variant">착용률 변화와 관리자 점검 시간 감소를 측정해 절감액 가정 검증</p>
+            </div>
+            <div>
+              <span class="material-symbols-outlined text-primary text-3xl">hub</span>
+              <h3 class="font-display font-bold text-lg mt-2 mb-1">확장 설계</h3>
+              <p class="text-sm text-on-surface-variant">3개 이상 현장으로 확장해 회수기간을 약 15개월 수준으로 단축</p>
+            </div>
+          </div>
+          <div class="px-8 lg:px-12 pb-8 lg:pb-12">
+            <div class="p-4 bg-surface-container rounded-lg flex items-start gap-3 text-sm text-on-surface-variant">
+              <span class="material-symbols-outlined text-primary">info</span>
+              <span>설치는 현장당 약 1일이면 끝납니다. 도면 업로드, 순찰 경로 저장, 충전 도크와 5G/LTE 라우터 설치까지 포함합니다. 작업자 촬영에 대해서는 사전 고지를 진행합니다.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== 하단 ===== -->
+  <footer class="bg-surface-container text-on-surface-variant">
+    <div class="max-w-7xl mx-auto px-5 lg:px-16 py-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <div class="max-w-md">
+        <span class="font-display text-xl tracking-tight text-primary font-extrabold">TERRAGUARD</span>
+        <p class="mt-2 text-sm leading-relaxed">건설현장 보호구 착용 점검 로봇. 작업자가 다치기 전에 피지컬 AI가 먼저 확인합니다.</p>
+      </div>
+      <div class="text-sm md:text-right">
+        <p>나만의 피지컬 AI 제품 기획 과제</p>
+        <p class="label mt-1">PRD v1.1 · 2026-10-06</p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

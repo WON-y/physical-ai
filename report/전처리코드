@@ -1,0 +1,714 @@
+"""건설현장 PPE 점검 로봇 — 학습 데이터 구축용 전처리 (단일 파일 버전).
+
+구성 (위에서 아래 순서로 정의):
+  1. 설정값          — 보고서의 추천 초기값 (frozen dataclass)
+  2. 공통 전처리      — 학습·추론이 같은 코드를 써야 하는 부분 (품질 측정, CLAHE, letterbox, 타일)
+  3. 증강            — train 전용 (albumentations 는 처음 쓸 때만 import)
+  4. 오프라인 파이프라인 1~11단계
+
+  1 프레임 샘플링 + 중복 제거 (pHash + 변화 픽셀 2단계 확인)
+  2 원본 기준 품질 태깅 (블러·섬광·렌즈 오염)
+  3 태그 기반 선별 (심각 → 제외, 경미 → 최종 세트의 약 12%까지 유지)
+  4 (선택) 화이트밸런스    ┐ preprocess() — 추론과 동일한 코드
+  5 CLAHE (L 채널)          ┘
+  6 라벨링 (GT → YOLO, 라벨 규칙 적용)
+  7 날짜 단위 분할 (70/15/15) + 누수 검사
+  8 고해상도 유지(1280) / 2×1 타일링
+  9 열화 증강 (train 만)   ┐
+ 10 불균형 대응             ├ train 전용
+ 11 Hard Negative 비율 확보 ┘
+
+실행: python3 preprocess_code.py   (data/raw/*.mp4 + *.json 필요)
+필요 패키지: pip install opencv-python-headless numpy albumentations
+"""
+import json
+import os
+import random
+import shutil
+import time
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+
+import cv2
+import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+RAW = os.path.join(HERE, "data", "raw")
+WORK = os.path.join(HERE, "data", "work")
+OUT = os.path.join(HERE, "data", "dataset")
+VIS = os.path.join(HERE, "data", "vis")
+SEED = 7
+
+
+# ######################################################################
+# 1. 설정값 — 학습(offline)과 추론(online)이 같은 값을 읽는다
+# ######################################################################
+@dataclass(frozen=True)
+class CommonCfg:
+    # --- 품질 게이트 (원본 기준) ---
+    blur_thr: float = 60.0            # Laplacian 분산 < 60 → blur
+    blur_severe_ratio: float = 0.5    # < 30 이면 '심각'
+    sat_pixel: int = 250              # 포화 픽셀 기준값
+    sat_thr: float = 0.15             # 포화 비율 > 15% → flash
+    sat_severe: float = 0.30          # > 30% 이면 '심각'
+    # --- 색·밝기 ---
+    use_wb: bool = False              # (선택) Gray-World. 기본 OFF — 켜면 학습·추론 모두 적용
+    wb_alpha: float = 0.5             # 원본과 50:50 블렌드
+    wb_exclude: int = 240             # 포화 영역(흰 안전모·눈) 제외 기준
+    clahe_clip: float = 2.0
+    clahe_tile: tuple = (8, 8)
+    # --- 해상도 ---
+    imgsz: int = 1280                 # 축소 금지: 1280 원본 폭 유지
+    stride: int = 32                  # letterbox 높이 배수 → 1280×736
+
+
+@dataclass(frozen=True)
+class OfflineCfg:
+    src_fps: int = 30
+    sample_fps: int = 2               # 30fps → 2fps
+    phash_dup_dist: int = 6           # 해밍거리 ≤ 6 이면 중복 후보
+    dup_change_ratio: float = 0.01    # 후보 중 '변한 픽셀' < 1% 일 때만 중복 확정 (작은 작업자 움직임 보존)
+    mild_keep_ratio: float = 0.12     # 경미한 열화 프레임은 최종 세트의 약 10~15%까지 유지
+    dirt_cell_ratio: float = 0.03     # 렌즈 오염 셀 비율 ≥ 3% → dirty
+    split: dict = field(default_factory=lambda: {"train": 0.70, "val": 0.15, "test": 0.15})
+    tile_overlap: float = 0.20        # 2×1 타일, 겹침 20%
+    tile_min_visibility: float = 0.5  # 타일 안에 50% 이상 남은 박스만 유지
+    min_box_px: int = 4               # 4px 미만 박스는 버림
+    shoe_max_dist_m: float = 10.0     # 안전화는 10m 이내만 라벨
+    shoe_min_h_px: int = 8            # 높이 8px 미만은 ignore
+    violation_repeat: int = 4         # 미착용 이미지 ×3~5 반복 (원본 1 + 증강 3)
+    copy_paste_prob: float = 0.3      # 일반 train 이미지에 미착용 작업자 1명을 붙여넣을 확률
+    hard_negative_min: float = 0.10   # Hard Negative 비율 하한 10%
+    focal_gamma: float = 1.5          # 학습 하이퍼파라미터로 기록
+
+
+@dataclass(frozen=True)
+class OnlineCfg:
+    buffer_frames: int = 9            # 0.3초 @30fps
+    dirt_check_every_s: float = 10.0
+    head_top_ratio: float = 0.25      # 머리 박스 중심이 사람 박스 상단 25% 안에 있어야 착용 인정
+    vote_window: int = 5
+    vote_hits: int = 3                # 최근 5회 중 3회 이상 미착용이면 경보
+    iou_match: float = 0.3
+
+
+CLASSES = ["person", "head_helmet", "head_no_helmet", "vest", "no_vest", "safety_shoe"]
+CLS_ID = {c: i for i, c in enumerate(CLASSES)}
+VIOLATION_CLASSES = {"head_no_helmet", "no_vest"}
+
+COMMON = CommonCfg()
+OFFLINE = OfflineCfg()
+ONLINE = OnlineCfg()
+
+
+# ######################################################################
+# 2. 공통 전처리 — 학습·추론이 바이트 단위로 같아야 하는 부분
+# ######################################################################
+_CLAHE = cv2.createCLAHE(clipLimit=COMMON.clahe_clip, tileGridSize=COMMON.clahe_tile)
+
+
+# ---------------------------------------------------------------- 측정 (반드시 원본에서)
+def blur_score(bgr: np.ndarray) -> float:
+    """Laplacian 분산. 낮을수록 흐림."""
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+
+def saturation_ratio(bgr: np.ndarray, thr: int = COMMON.sat_pixel) -> float:
+    """과노출(섬광·역광) 픽셀 비율."""
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    return float((gray >= thr).mean())
+
+
+def quality_tags(bgr: np.ndarray) -> dict:
+    """원본 프레임의 품질 태그와 심각도. 보정 전에 호출해야 한다."""
+    b, s = blur_score(bgr), saturation_ratio(bgr)
+    tags, severe = [], False
+    if b < COMMON.blur_thr:
+        tags.append("blur")
+        severe |= b < COMMON.blur_thr * COMMON.blur_severe_ratio
+    if s > COMMON.sat_thr:
+        tags.append("flash")
+        severe |= s > COMMON.sat_severe
+    return {"blur_score": b, "sat_ratio": s, "tags": tags, "severe": severe}
+
+
+def cell_sharpness(bgr: np.ndarray, grid=(32, 18)) -> np.ndarray:
+    """화면을 32×18 셀(40px)로 나눠 셀별 Laplacian 분산 (렌즈 오염 탐지용)."""
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    lap = cv2.Laplacian(gray, cv2.CV_32F)
+    h, w = gray.shape
+    gx, gy = grid
+    cells = lap[: h - h % gy, : w - w % gx].reshape(gy, h // gy, gx, w // gx)
+    return cells.var(axis=(1, 3))
+
+
+def lens_dirt_ratio(frames: list) -> tuple:
+    """여러 프레임에서 '계속' 흐린 셀의 비율.
+
+    렌즈 얼룩은 화면에 고정돼 있으므로, 같은 행의 다른 셀보다 뚜렷이 덜 선명한 상태가
+    대부분의 프레임에서 유지되는 셀을 오염으로 본다 (하늘처럼 원래 매끈한 행은 행 중앙값으로 걸러짐).
+    """
+    if len(frames) < 3:
+        return 0.0, None
+    stack = np.stack([cell_sharpness(f) for f in frames])           # (N, 18, 32)
+    row_med = np.median(stack, axis=2, keepdims=True)
+    low = stack < 0.35 * row_med                                    # 행 대비 뚜렷이 흐림
+    textured_row = row_med > 50                                     # 원래 질감이 있는 행만
+    persistent = (low & textured_row).mean(axis=0) >= 0.7           # 70% 이상 프레임에서 유지
+    n_textured = int(np.broadcast_to(np.median(textured_row, axis=0), persistent.shape).sum())
+    return float(persistent.sum() / max(1, n_textured)), persistent  # 질감 있는 셀 중 오염 비율
+
+
+# ---------------------------------------------------------------- 보정 (색 → 밝기)
+def gray_world_soft(bgr: np.ndarray, alpha: float = COMMON.wb_alpha) -> np.ndarray:
+    """약한 화이트밸런스. 포화 영역(흰 안전모·눈)은 추정에서 제외."""
+    img = bgr.astype(np.float32)
+    mask = img.max(axis=2) < COMMON.wb_exclude
+    if mask.sum() < 100:
+        return bgr
+    means = img[mask].mean(axis=0)
+    gain = means.mean() / (means + 1e-6)
+    balanced = np.clip(img * gain, 0, 255)
+    return cv2.addWeighted(balanced, alpha, img, 1 - alpha, 0).astype(np.uint8)
+
+
+def clahe_l(bgr: np.ndarray) -> np.ndarray:
+    """LAB의 L 채널에만 CLAHE → 색상(a, b) 보존."""
+    lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    return cv2.cvtColor(cv2.merge([_CLAHE.apply(l), a, b]), cv2.COLOR_LAB2BGR)
+
+
+def preprocess(bgr: np.ndarray) -> np.ndarray:
+    """결정적 보정. 전체 해상도에서 수행하고, 리사이즈·타일링은 반드시 이 다음에."""
+    out = gray_world_soft(bgr) if COMMON.use_wb else bgr
+    return clahe_l(out)
+
+
+# ---------------------------------------------------------------- 크기 (정보 손실 → 마지막)
+def letterbox(bgr: np.ndarray, imgsz: int = COMMON.imgsz, stride: int = COMMON.stride):
+    """폭을 imgsz에 맞추고(1280 원본이면 배율 1.0 = 축소 없음) 높이를 stride 배수로 패딩."""
+    h, w = bgr.shape[:2]
+    r = imgsz / w
+    nw, nh = imgsz, int(round(h * r))
+    img = bgr if r == 1.0 else cv2.resize(bgr, (nw, nh), interpolation=cv2.INTER_LINEAR)
+    ph = int(np.ceil(nh / stride) * stride)
+    top = (ph - nh) // 2
+    out = cv2.copyMakeBorder(img, top, ph - nh - top, 0, 0, cv2.BORDER_CONSTANT, value=(114, 114, 114))
+    return out, r, top
+
+
+def unletterbox_box(box, r, top):
+    x1, y1, x2, y2 = box
+    return [x1 / r, (y1 - top) / r, x2 / r, (y2 - top) / r]
+
+
+def tile_windows(w: int, h: int, overlap: float):
+    """2×1 타일 창 (x0, y0, x1, y1). 폭 = W / (2 - overlap)."""
+    tw = int(round(w / (2 - overlap)))
+    return [(0, 0, tw, h), (w - tw, 0, w, h)]
+
+
+# ######################################################################
+# 3. 증강 (train 전용, val/test 에는 절대 적용하지 않음)
+#    degrade  : 비·눈·먼지·그림자·역광·블러·노이즈·압축 → '원본'에 적용 후 preprocess(CLAHE)
+#    geometric: 좌우 반전·원근·스케일·부분 가림     → 보정 후 적용
+#    이유: 실제 추론 입력은 CLAHE(열화된 원본)이므로 열화를 CLAHE 앞에 둔다.
+# ######################################################################
+_AUG = None
+
+
+def _aug():
+    """albumentations 는 증강을 처음 쓸 때만 import (추론 쪽에서 이 파일을 불러도 깨지지 않게)."""
+    global _AUG
+    if _AUG is None:
+        import albumentations as A
+        bbox = A.BboxParams(format="pascal_voc", label_fields=["labels"], min_visibility=0.3,
+                            min_width=4, min_height=4, clip=True)
+        degrade = A.Compose([
+            # 조명: 머리 그림자(B7) · 역광(B3) · 밝기 변화
+            A.RandomBrightnessContrast(brightness_limit=0.25, contrast_limit=0.25, p=0.5),
+            A.RandomShadow(shadow_roi=(0, 0, 1, 0.6), num_shadows_limit=(1, 2), shadow_dimension=5, p=0.3),
+            A.RandomSunFlare(flare_roi=(0, 0, 1, 0.4), src_radius=150, p=0.1),
+            # 색: 흰 안전모·형광 조끼 색이 바뀌지 않도록 hue ±5 로 제한 (F2, F3)
+            A.HueSaturationValue(hue_shift_limit=5, sat_shift_limit=15, val_shift_limit=20, p=0.3),
+            # 날씨·대기·렌즈 (C1, C2, C4) — 하나만
+            A.OneOf([
+                A.RandomRain(slant_range=(-10, 10), drop_length=15, blur_value=3, brightness_coefficient=0.9, p=1.0),
+                A.RandomSnow(snow_point_range=(0.1, 0.3), brightness_coeff=1.8, p=1.0),
+                A.RandomFog(fog_coef_range=(0.1, 0.25), alpha_coef=0.08, p=1.0),
+                A.OneOf([A.Spatter(mode="rain", p=1.0), A.Spatter(mode="mud", p=1.0)], p=1.0),
+            ], p=0.35),
+            # 진동 블러 (A3, E5)
+            A.OneOf([A.MotionBlur(blur_limit=(3, 9), p=1.0), A.GaussianBlur(blur_limit=(3, 5), p=1.0)], p=0.25),
+            A.ISONoise(p=0.2),
+            A.ImageCompression(quality_range=(60, 95), p=0.3),            # 전송 압축 (H4)
+        ])                                                                 # 광도 변환만 → 박스 좌표 불변
+        geometric = A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.Perspective(scale=(0.02, 0.05), p=0.3),
+            A.Affine(scale=(0.7, 1.1), translate_percent=(-0.05, 0.05), border_mode=0, fill=114, p=0.5),
+            A.CoarseDropout(num_holes_range=(1, 4), hole_height_range=(0.05, 0.15),
+                            hole_width_range=(0.05, 0.15), fill=114, p=0.3),  # 부분 가림 (E4)
+        ], bbox_params=bbox)
+        _AUG = (degrade, geometric)
+    return _AUG
+
+
+def set_seed(seed: int):
+    degrade, geometric = _aug()
+    degrade.set_random_seed(seed)
+    geometric.set_random_seed(seed + 1)
+
+
+# ######################################################################
+# 4. 오프라인 파이프라인
+# ######################################################################
+
+# ====================================================================== 유틸
+def phash(bgr):
+    g = cv2.resize(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY), (32, 32), interpolation=cv2.INTER_AREA)
+    d = cv2.dct(g.astype(np.float32))[:8, :8]
+    return (d > np.median(d)).flatten()
+
+
+def hamming(a, b):
+    return int(np.count_nonzero(a != b))
+
+
+def thumb(bgr):
+    """중복 검증용 축소본 (median blur 로 비·눈 점 노이즈 억제)."""
+    g = cv2.medianBlur(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY), 5)
+    return cv2.resize(g, (320, 180), interpolation=cv2.INTER_AREA).astype(np.int16)
+
+
+def is_near_duplicate(h1, t1, h2, t2):
+    """pHash 만으로는 넓은 정지 배경 속 작은 작업자의 움직임을 놓친다
+    (현장 화면의 대부분이 하늘·바닥이라 전역 해시가 거의 같음).
+    → pHash 후보 + 실제로 변한 픽셀 비율로 2단계 확인."""
+    if hamming(h1, h2) > OFFLINE.phash_dup_dist:
+        return False
+    return float((np.abs(t1 - t2) > 25).mean()) < OFFLINE.dup_change_ratio
+
+
+def to_yolo(box, w, h):
+    x1, y1, x2, y2 = box
+    return [(x1 + x2) / 2 / w, (y1 + y2) / 2 / h, (x2 - x1) / w, (y2 - y1) / h]
+
+
+def write_yolo(path, labels, w, h):
+    with open(path, "w") as fp:
+        for lb in labels:
+            cx, cy, bw, bh = to_yolo(lb["box"], w, h)
+            fp.write(f"{CLS_ID[lb['cls']]} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}\n")
+
+
+def clip_box(b, w, h):
+    return [max(0.0, b[0]), max(0.0, b[1]), min(float(w), b[2]), min(float(h), b[3])]
+
+
+def draw_boxes(img, labels, thick=2):
+    out = img.copy()
+    for lb in labels:
+        x1, y1, x2, y2 = map(int, lb["box"])
+        col = (0, 0, 255) if lb["cls"] in VIOLATION_CLASSES else (0, 200, 0) if lb["cls"] != "person" else (255, 160, 0)
+        cv2.rectangle(out, (x1, y1), (x2, y2), col, thick)
+    return out
+
+
+def put(img, text, y=28, scale=0.8):
+    cv2.putText(img, text, (10, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), 4, cv2.LINE_AA)
+    cv2.putText(img, text, (10, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 1, cv2.LINE_AA)
+    return img
+
+
+# ====================================================================== 1~2 단계
+def stage1_2_sample_dedup_quality(report):
+    """클립별로 30fps → 2fps 샘플링, pHash 중복 제거, '원본'에서 품질 태깅."""
+    os.makedirs(os.path.join(WORK, "raw"), exist_ok=True)
+    step = OFFLINE.src_fps // OFFLINE.sample_fps
+    records, stats = [], Counter()
+    gate_eval = Counter()
+    dirt_eval = []
+    for fn in sorted(f for f in os.listdir(RAW) if f.endswith(".mp4")):
+        clip = fn[:-4]
+        gt = json.load(open(os.path.join(RAW, clip + ".json")))
+        meta = gt["meta"]
+        cap = cv2.VideoCapture(os.path.join(RAW, fn))
+        kept, clip_recs, f = [], [], 0
+        while True:
+            ok, raw = cap.read()
+            if not ok:
+                break
+            if f % step == 0:
+                stats["sampled"] += 1
+                h, t = phash(raw), thumb(raw)
+                if any(is_near_duplicate(h, t, kh, kt) for kh, kt in kept):
+                    stats["duplicates_removed"] += 1
+                else:
+                    kept.append((h, t))
+                    q = quality_tags(raw)                         # ← 보정 전 원본에서 측정
+                    path = os.path.join(WORK, "raw", f"{clip}_{f:04d}.png")
+                    cv2.imwrite(path, raw, [cv2.IMWRITE_PNG_COMPRESSION, 1])
+                    ev = gt["frames"][f]["events"]
+                    gt_blur = any(e.startswith("blur") and int(e[4:]) >= 13 for e in ev)
+                    gt_flash = "flash" in ev
+                    gate_eval["blur_tp"] += gt_blur and "blur" in q["tags"]
+                    gate_eval["blur_fn"] += gt_blur and "blur" not in q["tags"]
+                    gate_eval["blur_fp"] += (not gt_blur) and "blur" in q["tags"]
+                    gate_eval["flash_tp"] += gt_flash and "flash" in q["tags"]
+                    gate_eval["flash_fn"] += gt_flash and "flash" not in q["tags"]
+                    gate_eval["flash_fp"] += (not gt_flash) and "flash" in q["tags"]
+                    clip_recs.append(dict(clip=clip, date=meta["date"], zone=meta["zone"], frame=f,
+                                          raw_path=path, hash=h, thumb=t, **q))
+            f += 1
+        # 렌즈 오염은 클립 단위로 판단 (얼룩은 화면에 고정돼 있으므로) — 블러 프레임은 제외하고 계산
+        sharp = [cv2.imread(r["raw_path"]) for r in clip_recs if "blur" not in r["tags"]][:12]
+        ratio, _ = lens_dirt_ratio(sharp)
+        dirty = ratio >= OFFLINE.dirt_cell_ratio
+        dirt_eval.append(dict(clip=clip, dirt_ratio=round(ratio, 4), detected=dirty, truth=meta["lens_dirt"]))
+        for r in clip_recs:
+            if dirty:
+                r["tags"] = r["tags"] + ["dirty"]
+                r["severe"] = r["severe"] or ratio > 0.10
+        records += clip_recs
+    stats["after_dedup"] = len(records)
+    report["stage1_2"] = dict(**stats, quality_gate_vs_truth=dict(gate_eval), lens_dirt=dirt_eval)
+    return records
+
+
+# ====================================================================== 3 단계
+def stage3_select(records, report):
+    rng = random.Random(SEED)
+    severe = [r for r in records if r["severe"]]
+    mild = [r for r in records if r["tags"] and not r["severe"]]
+    clean = [r for r in records if not r["tags"]]
+    n_mild = int(round(OFFLINE.mild_keep_ratio / (1 - OFFLINE.mild_keep_ratio) * len(clean)))
+    keep_mild = rng.sample(mild, min(n_mild, len(mild)))
+    selected = sorted(clean + keep_mild, key=lambda r: (r["clip"], r["frame"]))
+    report["stage3"] = dict(severe_dropped=len(severe), mild_total=len(mild), mild_kept=len(keep_mild),
+                            clean=len(clean), selected=len(selected),
+                            mild_ratio_in_final=round(len(keep_mild) / max(1, len(selected)), 3),
+                            tag_counts=dict(Counter(t for r in records for t in r["tags"])))
+    return selected
+
+
+# ====================================================================== 4~5 단계
+def stage4_5_preprocess(selected, report):
+    os.makedirs(os.path.join(WORK, "clean"), exist_ok=True)
+    t0 = time.perf_counter()
+    for r in selected:
+        raw = cv2.imread(r["raw_path"])
+        r["clean_path"] = os.path.join(WORK, "clean", os.path.basename(r["raw_path"]))
+        cv2.imwrite(r["clean_path"], preprocess(raw), [cv2.IMWRITE_PNG_COMPRESSION, 1])  # 전체 해상도에서
+    report["stage4_5"] = dict(use_wb=COMMON.use_wb, clahe_clip=COMMON.clahe_clip, clahe_tile=list(COMMON.clahe_tile),
+                              ms_per_frame=round((time.perf_counter() - t0) * 1000 / max(1, len(selected)), 2))
+
+
+# ====================================================================== 6 단계
+def label_frame(gt_frame, w, h):
+    """GT → 라벨. 규칙: 바닥 안전모·콘은 라벨 안 함, 안전화는 10m 이내·8px 이상만, 4px 미만 버림."""
+    labels, ignores = [], []
+    for o in gt_frame["objects"]:
+        b = clip_box(o["box"], w, h)
+        bw, bh = b[2] - b[0], b[3] - b[1]
+        if bw < OFFLINE.min_box_px or bh < OFFLINE.min_box_px:
+            continue
+        lb = dict(cls=o["cls"], box=b, worker_id=o["worker_id"], dist_m=o["dist_m"])
+        if o["cls"] == "safety_shoe" and (o["dist_m"] > OFFLINE.shoe_max_dist_m or bh < OFFLINE.shoe_min_h_px):
+            ignores.append(lb)
+            continue
+        labels.append(lb)
+    return labels, ignores, len(gt_frame["distractors"])
+
+
+def stage6_label(selected, report):
+    gts, n_ignore, n_dis = {}, 0, 0
+    for r in selected:
+        if r["clip"] not in gts:
+            gts[r["clip"]] = json.load(open(os.path.join(RAW, r["clip"] + ".json")))
+        g = gts[r["clip"]]
+        w, h = g["meta"]["size"]
+        r["labels"], r["ignores"], r["n_distractors"] = label_frame(g["frames"][r["frame"]], w, h)
+        r["net"] = g["meta"]["net"]
+        n_ignore += len(r["ignores"])
+        n_dis += r["n_distractors"]
+    cnt = Counter(lb["cls"] for r in selected for lb in r["labels"])
+    report["stage6"] = dict(class_counts=dict(cnt), shoes_ignored=n_ignore,
+                            shoes_labeled=cnt.get("safety_shoe", 0), distractor_instances=n_dis)
+
+
+# ====================================================================== 7 단계
+def stage7_split(selected, report):
+    by_date = Counter(r["date"] for r in selected)
+    dates = sorted(by_date)
+    total = sum(by_date.values())
+    assign, acc = {}, 0
+    for d in reversed(dates):                     # 가장 최근 날짜부터 test → val → 나머지 train
+        if acc < OFFLINE.split["test"] * total:
+            assign[d] = "test"
+        elif acc < (OFFLINE.split["test"] + OFFLINE.split["val"]) * total:
+            assign[d] = "val"
+        else:
+            assign[d] = "train"
+        acc += by_date[d]
+    for r in selected:
+        r["split"] = assign[r["date"]]
+    # 누수 검사: 서로 다른 split 사이에 '거의 같은 프레임'이 있는지 (중복 제거와 같은 기준)
+    groups = defaultdict(list)
+    for r in selected:
+        groups[r["split"]].append(r)
+    min_cross, cross_dups = 64, 0
+    for a in groups:
+        for b in groups:
+            if a < b:
+                for ra in groups[a]:
+                    for rb in groups[b]:
+                        min_cross = min(min_cross, hamming(ra["hash"], rb["hash"]))
+                        cross_dups += is_near_duplicate(ra["hash"], ra["thumb"], rb["hash"], rb["thumb"])
+    cnt = Counter(r["split"] for r in selected)
+    report["stage7"] = dict(date_assignment=assign, frames=dict(cnt),
+                            ratio={k: round(v / total, 3) for k, v in cnt.items()},
+                            min_cross_split_phash=min_cross, cross_split_near_duplicates=cross_dups,
+                            leakage=cross_dups > 0)
+
+
+# ====================================================================== 8 단계
+def save_sample(img, labels, split, name, root_full, root_tile, tile_stats):
+    h, w = img.shape[:2]
+    cv2.imwrite(os.path.join(root_full, "images", split, name + ".jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    write_yolo(os.path.join(root_full, "labels", split, name + ".txt"), labels, w, h)
+    for ti, (x0, y0, x1, y1) in enumerate(tile_windows(w, h, OFFLINE.tile_overlap)):
+        tl = []
+        for lb in labels:
+            b = lb["box"]
+            ix0, iy0, ix1, iy1 = max(b[0], x0), max(b[1], y0), min(b[2], x1), min(b[3], y1)
+            inter = max(0, ix1 - ix0) * max(0, iy1 - iy0)
+            area = (b[2] - b[0]) * (b[3] - b[1])
+            if area > 0 and inter / area >= OFFLINE.tile_min_visibility:
+                tl.append(dict(cls=lb["cls"], box=[ix0 - x0, iy0 - y0, ix1 - x0, iy1 - y0]))
+                tile_stats["kept"] += 1
+            elif inter > 0:
+                tile_stats["cut"] += 1
+        tile = img[y0:y1, x0:x1]
+        cv2.imwrite(os.path.join(root_tile, "images", split, f"{name}_t{ti}.jpg"), tile, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        write_yolo(os.path.join(root_tile, "labels", split, f"{name}_t{ti}.txt"), tl, x1 - x0, y1 - y0)
+
+
+def stage8_save(selected, report):
+    root_full, root_tile = os.path.join(OUT, "full"), os.path.join(OUT, "tiles")
+    shutil.rmtree(OUT, ignore_errors=True)
+    for root in (root_full, root_tile):
+        for sp in ("train", "val", "test"):
+            os.makedirs(os.path.join(root, "images", sp), exist_ok=True)
+            os.makedirs(os.path.join(root, "labels", sp), exist_ok=True)
+    tile_stats = Counter()
+    for r in selected:
+        img = cv2.imread(r["clean_path"])
+        r["name"] = os.path.splitext(os.path.basename(r["clean_path"]))[0]
+        save_sample(img, r["labels"], r["split"], r["name"], root_full, root_tile, tile_stats)
+    h, w = cv2.imread(selected[0]["clean_path"]).shape[:2]
+    report["stage8"] = dict(full_size=[w, h], resized=False, tile_windows=tile_windows(w, h, OFFLINE.tile_overlap),
+                            tile_boxes=dict(tile_stats))
+    return root_full, root_tile, tile_stats
+
+
+# ====================================================================== 9~11 단계
+def augment_one(raw, labels):
+    """열화(원본) → common.preprocess → 기하 변환."""
+    degrade, geometric = _aug()
+    img = degrade(image=raw)["image"]
+    img = preprocess(img)
+    res = geometric(image=img, bboxes=[lb["box"] for lb in labels], labels=list(range(len(labels))))
+    out = [dict(cls=labels[int(i)]["cls"], box=list(map(float, b))) for b, i in zip(res["bboxes"], res["labels"])]
+    return res["image"], out
+
+
+def build_violation_bank(train):
+    """미착용 작업자 crop (train 에서만 — val/test 누수 방지)."""
+    bank = []
+    for r in train:
+        by_w = defaultdict(list)
+        for lb in r["labels"]:
+            by_w[lb["worker_id"]].append(lb)
+        for wid, lbs in by_w.items():
+            if any(l["cls"] in VIOLATION_CLASSES for l in lbs):
+                person = next((l for l in lbs if l["cls"] == "person"), None)
+                if person is None:
+                    continue
+                x1, y1, x2, y2 = map(int, person["box"])
+                if x2 - x1 < 8 or y2 - y1 < 20:
+                    continue
+                raw = cv2.imread(r["raw_path"])
+                crop = raw[y1:y2, x1:x2].copy()
+                rel = [dict(cls=l["cls"], box=[l["box"][0] - x1, l["box"][1] - y1, l["box"][2] - x1, l["box"][3] - y1])
+                       for l in lbs]
+                bank.append(dict(crop=crop, labels=rel, feet_y=y2, src=r["name"]))
+    return bank
+
+
+def copy_paste(raw, labels, item, rng):
+    """미착용 작업자를 같은 거리(같은 발 위치 y)에 겹치지 않게 붙여넣기."""
+    h, w = raw.shape[:2]
+    ch, cw = item["crop"].shape[:2]
+    persons = [lb["box"] for lb in labels if lb["cls"] == "person"]
+    for _ in range(20):
+        x0 = rng.randint(0, w - cw - 1)
+        y0 = item["feet_y"] - ch
+        if y0 < 0:
+            return None
+        cand = [x0, y0, x0 + cw, y0 + ch]
+        if all(cand[2] < p[0] - 4 or cand[0] > p[2] + 4 for p in persons):
+            out = raw.copy()
+            out[y0:y0 + ch, x0:x0 + cw] = item["crop"]
+            new = labels + [dict(cls=l["cls"], box=[l["box"][0] + x0, l["box"][1] + y0, l["box"][2] + x0, l["box"][3] + y0])
+                            for l in item["labels"]]
+            return out, new
+    return None
+
+
+def stage9_11_train_aug(selected, root_full, root_tile, tile_stats, report):
+    rng = random.Random(SEED)
+    set_seed(SEED)
+    train = [r for r in selected if r["split"] == "train"]
+    before = Counter(lb["cls"] for r in train for lb in r["labels"])
+    after = Counter(before)
+    bank = build_violation_bank(train)
+    n_aug, n_cp, n_hn = 0, 0, 0
+    aug_examples, cp_example = [], None
+    is_hn = lambda r: r["n_distractors"] > 0 or r["net"]
+
+    def emit(img, labels, name):
+        nonlocal after
+        save_sample(img, labels, "train", name, root_full, root_tile, tile_stats)
+        after.update(lb["cls"] for lb in labels)
+
+    for r in train:
+        raw = cv2.imread(r["raw_path"])
+        viol = any(lb["cls"] in VIOLATION_CLASSES for lb in r["labels"])
+        # 10: 미착용 이미지 반복 (원본 1 + 증강 N-1)
+        for k in range(OFFLINE.violation_repeat - 1 if viol else 0):
+            img, lbs = augment_one(raw, r["labels"])
+            emit(img, lbs, f"{r['name']}_aug{k}")
+            n_aug += 1
+            if len(aug_examples) < 3:
+                aug_examples.append((img, lbs))
+        # 10: Copy-Paste (일반 이미지에 미착용 작업자 추가)
+        if not viol and bank and rng.random() < OFFLINE.copy_paste_prob:
+            res = copy_paste(raw, r["labels"], rng.choice(bank), rng)
+            if res:
+                img, lbs = augment_one(*res)
+                emit(img, lbs, f"{r['name']}_cp")
+                n_cp += 1
+                if cp_example is None:
+                    cp_example = (preprocess(res[0]), res[1])
+    # 11: Hard Negative 비율 확인 → 부족하면 혼동 객체 이미지를 증강해서 보충
+    hn_imgs = [r for r in train if is_hn(r)]
+    hn_ratio = len(hn_imgs) / max(1, len(train))
+    while hn_ratio < OFFLINE.hard_negative_min and hn_imgs:
+        r = rng.choice(hn_imgs)
+        img, lbs = augment_one(cv2.imread(r["raw_path"]), r["labels"])
+        emit(img, lbs, f"{r['name']}_hn{n_hn}")
+        n_hn += 1
+        hn_ratio = (len(hn_imgs) + n_hn) / max(1, len(train) + n_hn)
+    report["stage9_11"] = dict(
+        train_original=len(train), violation_aug_copies=n_aug, copy_paste_images=n_cp, hard_negative_extra=n_hn,
+        train_total=len(train) + n_aug + n_cp + n_hn, violation_bank=len(bank),
+        hard_negative_ratio=round(hn_ratio, 3),
+        class_counts_before=dict(before), class_counts_after=dict(after),
+        violation_share_before=round(sum(before[c] for c in VIOLATION_CLASSES) / max(1, before["person"]), 3),
+        violation_share_after=round(sum(after[c] for c in VIOLATION_CLASSES) / max(1, after["person"]), 3),
+        focal_gamma=OFFLINE.focal_gamma)
+    return aug_examples, cp_example
+
+
+# ====================================================================== 데이터셋 설정 파일
+def write_yaml(root_full, root_tile):
+    for root, imgsz in ((root_full, COMMON.imgsz), (root_tile, 640)):
+        with open(os.path.join(root, "data.yaml"), "w") as fp:
+            fp.write(f"path: {root}\ntrain: images/train\nval: images/val\ntest: images/test\n")
+            fp.write(f"nc: {len(CLASSES)}\nnames: {CLASSES}\n")
+        with open(os.path.join(root, "hyp.yaml"), "w") as fp:
+            fp.write(f"imgsz: {imgsz}\nfl_gamma: {OFFLINE.focal_gamma}\n"
+                     "# 증강은 offline 에서 이미 적용 → 학습기 내장 색 증강은 약하게\n"
+                     "hsv_h: 0.0\nhsv_s: 0.2\nhsv_v: 0.2\nmosaic: 0.5\nfliplr: 0.5\n")
+
+
+# ====================================================================== 시각화
+def make_vis(records, selected, aug_examples, cp_example):
+    os.makedirs(VIS, exist_ok=True)
+    crop = (slice(230, 470), slice(0, 1280))
+    # 1) 원본 vs CLAHE (역광 / 눈 / 비)
+    rows = []
+    for clip in ("D1_Z2", "D4_Z1", "D3_Z2"):   # 역광 / 눈 / 비
+        r = next((x for x in selected if x["clip"] == clip and not x["tags"]), None)
+        if r is None:
+            continue
+        raw = cv2.imread(r["raw_path"])
+        cl = cv2.imread(r["clean_path"])
+        a = put(raw[crop].copy(), f"{clip} raw")
+        b = put(cl[crop].copy(), f"{clip} CLAHE(L)")
+        rows.append(np.hstack([cv2.resize(a, (640, 120)), cv2.resize(b, (640, 120))]))
+    cv2.imwrite(os.path.join(VIS, "01_raw_vs_clahe.jpg"), np.vstack(rows))
+    # 2) 품질 게이트 예시
+    picks = []
+    for cond in (lambda r: not r["tags"], lambda r: "blur" in r["tags"] and r["severe"],
+                 lambda r: "flash" in r["tags"], lambda r: "dirty" in r["tags"]):
+        r = next((x for x in records if cond(x)), None)
+        if r:
+            img = cv2.resize(cv2.imread(r["raw_path"]), (640, 360))
+            tag = ",".join(r["tags"]) or "clean"
+            put(img, f"{tag}  blur={r['blur_score']:.0f} sat={r['sat_ratio']:.2f}", scale=0.6)
+            put(img, "DROP" if r["severe"] else ("KEEP(mild)" if r["tags"] else "KEEP"), y=56, scale=0.6)
+            picks.append(img)
+    while len(picks) < 4:
+        picks.append(np.zeros((360, 640, 3), np.uint8))
+    cv2.imwrite(os.path.join(VIS, "02_quality_gate.jpg"), np.vstack([np.hstack(picks[:2]), np.hstack(picks[2:4])]))
+    # 3) 증강 예시
+    if aug_examples:
+        tiles = [cv2.resize(draw_boxes(i, l), (640, 360)) for i, l in aug_examples[:3]]
+        if cp_example:
+            tiles.append(put(cv2.resize(draw_boxes(*cp_example), (640, 360)), "copy-paste (before aug)", scale=0.6))
+        while len(tiles) < 4:
+            tiles.append(np.zeros((360, 640, 3), np.uint8))
+        cv2.imwrite(os.path.join(VIS, "03_augment.jpg"), np.vstack([np.hstack(tiles[:2]), np.hstack(tiles[2:4])]))
+    # 4) 타일링 예시
+    r = next(x for x in selected if x["split"] == "train" and len(x["labels"]) > 8)
+    img = draw_boxes(cv2.imread(r["clean_path"]), r["labels"], 1)
+    h, w = img.shape[:2]
+    for (x0, y0, x1, y1), col in zip(tile_windows(w, h, OFFLINE.tile_overlap), ((255, 0, 255), (0, 255, 255))):
+        cv2.rectangle(img, (x0 + 2, y0 + 2), (x1 - 2, y1 - 2), col, 3)
+    cv2.imwrite(os.path.join(VIS, "04_tiles.jpg"), put(img, "2x1 tiles, overlap 20%"))
+
+
+# ====================================================================== main
+def main():
+    t0 = time.time()
+    report = {}
+    print("[1-2] 샘플링·중복 제거·원본 품질 태깅")
+    records = stage1_2_sample_dedup_quality(report)
+    print("[3]   태그 기반 선별")
+    selected = stage3_select(records, report)
+    print("[4-5] 공통 전처리 (WB 옵션 → CLAHE)")
+    stage4_5_preprocess(selected, report)
+    print("[6]   라벨링")
+    stage6_label(selected, report)
+    print("[7]   날짜 단위 분할 + 누수 검사")
+    stage7_split(selected, report)
+    print("[8]   1280 원본 해상도 저장 + 2×1 타일")
+    root_full, root_tile, tile_stats = stage8_save(selected, report)
+    print("[9-11] train 증강 · 불균형 대응 · Hard Negative")
+    aug_examples, cp_example = stage9_11_train_aug(selected, root_full, root_tile, tile_stats, report)
+    report["stage8"]["tile_boxes"] = dict(tile_stats)
+    write_yaml(root_full, root_tile)
+    make_vis(records, selected, aug_examples, cp_example)
+    report["elapsed_s"] = round(time.time() - t0, 1)
+    with open(os.path.join(HERE, "data", "report_offline.json"), "w") as fp:
+        json.dump(report, fp, ensure_ascii=False, indent=2, default=str)
+    return report
+
+
+if __name__ == "__main__":
+    rep = main()
+    print(json.dumps(rep, ensure_ascii=False, indent=1, default=str))

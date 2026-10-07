@@ -46,7 +46,8 @@
     body { word-break: keep-all; }
     .material-symbols-outlined { font-size: 1.25em; line-height: 1; vertical-align: middle; }
     .label { font-family: "Hanken Grotesk", "Pretendard", sans-serif; font-size: .72rem; letter-spacing: .1em; font-weight: 600; text-transform: uppercase; }
-    a:focus-visible, button:focus-visible { outline: 3px solid #ff9756; outline-offset: 3px; }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid #ff9756; outline-offset: 3px; }
+    summary::-webkit-details-marker { display: none; }
   </style>
 </head>
 <body class="bg-surface font-body text-on-surface antialiased">
@@ -79,6 +80,7 @@
         <a class="hover:text-on-surface transition-colors" href="#features">주요 기능</a>
         <a class="hover:text-on-surface transition-colors" href="#spec">제품 스펙</a>
         <a class="hover:text-on-surface transition-colors" href="#kpi">성능 목표</a>
+        <a class="hover:text-on-surface transition-colors" href="#data">데이터 전처리</a>
         <a class="hover:text-on-surface transition-colors" href="#roi">도입 효과</a>
       </nav>
       <a href="#poc" class="inline-flex items-center gap-1 bg-primary-container text-on-primary hover:bg-primary text-sm px-4 py-2 rounded-lg transition-colors shadow-sm">
@@ -579,6 +581,523 @@
               <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">네트워크 단절 시 이벤트 유실</dt><dd class="font-display font-bold text-primary">0%</dd></div>
               <div class="flex justify-between gap-4 py-3"><dt class="text-on-surface-variant">관리자 알림 확인 응답 (중앙값)</dt><dd class="font-display font-bold text-primary">≤ 5분</dd></div>
             </dl>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 데이터 전처리 설계 (report/전처리 과정 계획) ===== -->
+    <section id="data" class="py-20 lg:py-28 bg-surface-container">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-10">
+          <span class="label text-tertiary-container">DATA PREPROCESSING</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">필터보다 먼저,<br class="hidden sm:block"> 원본 해상도를 지킵니다</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">720p 카메라로 10~20m 거리를 찍으면 안전모는 13~25px 정도입니다. 입력을 640으로 줄이는 순간 검출 한계 아래로 떨어지기 때문에, 어떤 필터를 고르느냐보다 해상도를 지키는 것이 더 중요합니다.</p>
+          <p class="mt-3 label text-on-surface-variant">데이터 전처리 설계 보고서 · 2026-10-07 · 이채원</p>
+        </div>
+
+        <!-- 핵심 권장 구성 -->
+        <div class="grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-3 gap-5">
+          <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+            <span class="font-display text-4xl font-extrabold text-tertiary-container/40">01</span>
+            <h3 class="font-display text-lg font-bold mt-2 mb-2">결정적 전처리는 두 가지만</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed">원본 기준 품질 게이트(블러·과노출 선별)와 LAB L 채널 CLAHE만 학습과 추론에 똑같이 적용합니다.</p>
+            <div class="mt-auto pt-4 label text-primary">CLIP 2.0 // TILE 8×8</div>
+          </div>
+          <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+            <span class="font-display text-4xl font-extrabold text-tertiary-container/40">02</span>
+            <h3 class="font-display text-lg font-bold mt-2 mb-2">열화는 지우지 않고 학습시킵니다</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed">비·눈·먼지·블러는 복원 필터로 지우지 않고 증강으로 넣어 모델이 견디게 합니다. Dehaze와 De-rain은 기본 파이프라인에서 뺍니다.</p>
+            <div class="mt-auto pt-4 label text-primary">AUGMENT // NOT RESTORE</div>
+          </div>
+          <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+            <span class="font-display text-4xl font-extrabold text-tertiary-container/40">03</span>
+            <h3 class="font-display text-lg font-bold mt-2 mb-2">리사이즈는 마지막에, 축소 없이</h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed">imgsz 1280으로 처리하거나 640 타일 2장으로 나눠, 원거리 안전모 픽셀을 살립니다.</p>
+            <div class="mt-auto pt-4 label text-primary">IMGSZ 1280 // 2 TILES</div>
+          </div>
+        </div>
+        <div class="mt-5 p-4 bg-surface rounded-lg flex items-start gap-3 text-sm text-on-surface-variant shadow-sm">
+          <span class="material-symbols-outlined text-primary">lightbulb</span>
+          <span>여기에 <b class="text-on-surface">사람 단위 판정</b>(머리 박스가 사람 상단 25% 안에 있을 때만 착용 인정)을 더해 바닥 안전모와 주황 콘 오탐을 막습니다. 카메라를 머리 높이(1.2~1.6m)로 올리고 1080p 이상으로 바꾸면 어떤 전처리보다 효과가 큽니다.</span>
+        </div>
+
+        <!-- 섹션 내 목차 -->
+        <nav class="mt-10 flex flex-wrap gap-2 text-sm" aria-label="데이터 전처리 목차">
+          <a href="#data-env" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">현장 환경</a>
+          <a href="#data-principle" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">설계 원칙</a>
+          <a href="#data-train" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">학습용 전처리</a>
+          <a href="#data-infer" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">추론용 전처리</a>
+          <a href="#data-order" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">순서 근거</a>
+          <a href="#data-excluded" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">제외한 기법</a>
+          <a href="#data-validate" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">검증 실험</a>
+          <a href="#data-hw" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">하드웨어 · 추가 조사</a>
+        </nav>
+
+        <!-- 1. 현장 환경 분석 -->
+        <div id="data-env" class="mt-16">
+          <span class="label text-on-surface-variant">01 · FIELD CONDITIONS</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-4">현장 환경 분석</h3>
+          <div class="flex flex-wrap gap-2 mb-6 text-sm">
+            <span class="px-3 py-1 rounded bg-surface-container-high">주간 실외 토공 현장</span>
+            <span class="px-3 py-1 rounded bg-surface-container-high">자갈길 저속 주행 (&lt; 0.5m/s)</span>
+            <span class="px-3 py-1 rounded bg-surface-container-high">0.5m 아래에서 올려다보는 720p RGB</span>
+            <span class="px-3 py-1 rounded bg-surface-container-high">촬영 거리 10~20m</span>
+            <span class="px-3 py-1 rounded bg-surface-container-high">작업자 3~5명</span>
+            <span class="px-3 py-1 rounded bg-surface-container-high">흰색 안전모 · 형광+반사띠 조끼 · 안전화</span>
+            <span class="px-3 py-1 rounded bg-surface-container-high">미착용 빈도 1~10%</span>
+          </div>
+
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-5 gap-5">
+            <div class="lg:col-span-2 p-6 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display text-lg font-bold mb-1">거리별 객체 크기</h4>
+              <p class="text-xs text-on-surface-variant mb-4">1280×720, 수평 화각 70° 기준</p>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[360px] text-left text-sm">
+                  <thead>
+                    <tr class="bg-surface-container label"><th class="p-2.5">거리</th><th class="p-2.5">작업자</th><th class="p-2.5">안전모</th><th class="p-2.5">안전화</th></tr>
+                  </thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-semibold text-primary">10m</td><td class="p-2.5">약 155px</td><td class="p-2.5">약 25px</td><td class="p-2.5 text-error font-semibold">약 11px</td></tr>
+                    <tr><td class="p-2.5 font-semibold text-primary">15m</td><td class="p-2.5">약 104px</td><td class="p-2.5 text-error font-semibold">약 17px</td><td class="p-2.5 text-error font-semibold">약 7px</td></tr>
+                    <tr><td class="p-2.5 font-semibold text-primary">20m</td><td class="p-2.5">약 78px</td><td class="p-2.5 text-error font-semibold">약 13px</td><td class="p-2.5 text-error font-semibold">약 6px</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="mt-4 text-xs text-on-surface-variant leading-relaxed">화면 폭은 10m에서 14m, 20m에서 28m입니다. 안정적인 검출에는 보통 20~32px 이상이 필요하며(<span class="text-error font-semibold">빨간색</span>은 미달), 640으로 축소하면 위 수치가 절반이 됩니다.</p>
+            </div>
+
+            <div class="lg:col-span-3 p-6 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display text-lg font-bold mb-4">데이터 품질 핵심 문제 <span class="text-sm font-normal text-on-surface-variant">(우선순위 순)</span></h4>
+              <ol class="space-y-4 text-sm">
+                <li class="flex gap-3">
+                  <span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">1</span>
+                  <div><p class="font-semibold">원거리 소형 객체 — 안전모 13~25px, 안전화는 검출 불가 수준</p><p class="text-on-surface-variant mt-0.5">→ 원본 해상도 유지, 타일링, 리사이즈는 마지막 <span class="label text-outline ml-1">E2 · G4 · G5 · F1</span></p></div>
+                </li>
+                <li class="flex gap-3">
+                  <span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">2</span>
+                  <div><p class="font-semibold">올려다보는 시점 + 역광 + 흰 안전모 + 눈 + 머리 그림자 — 머리 영역 밝기 편차가 큼</p><p class="text-on-surface-variant mt-0.5">→ L 채널 CLAHE, 그림자·플레어 증강 <span class="label text-outline ml-1">G2 · B3 · B7 · F2 · C2</span></p></div>
+                </li>
+                <li class="flex gap-3">
+                  <span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">3</span>
+                  <div><p class="font-semibold">혼동 객체와 라벨 모호성 — 형광 작업복, 안전망, 주황 콘, 바닥 안전모, 방한복</p><p class="text-on-surface-variant mt-0.5">→ 사람 단위 판정, Hard Negative, 라벨 규칙 명문화 <span class="label text-outline ml-1">D2 · E6</span></p></div>
+                </li>
+                <li class="flex gap-3">
+                  <span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">4</span>
+                  <div><p class="font-semibold">프레임 품질 저하 — 자갈길 진동, 비·눈, 렌즈 오염, 간헐적 섬광</p><p class="text-on-surface-variant mt-0.5">→ 품질 게이트, 최선 프레임 선택, 열화 증강 <span class="label text-outline ml-1">A3 · C2 · C4 · B6 · G6</span></p></div>
+                </li>
+                <li class="flex gap-3">
+                  <span class="shrink-0 w-7 h-7 rounded-full bg-outline text-on-primary font-display font-bold flex items-center justify-center">5</span>
+                  <div><p class="font-semibold">클래스 불균형(미착용 1~10%) + 보유 데이터 없음</p><p class="text-on-surface-variant mt-0.5">→ 반복 샘플링, Copy-Paste, 날짜 단위 분할 <span class="label text-outline ml-1">F5 · I2</span></p></div>
+                </li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 설계 원칙 -->
+        <div id="data-principle" class="mt-16">
+          <span class="label text-on-surface-variant">02 · DESIGN PRINCIPLES</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">전처리 설계 원칙</h3>
+          <p class="text-on-surface-variant mb-6">모든 기법 선택과 순서는 아래 다섯 원칙에서 나왔습니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="p-5 bg-surface rounded-xl shadow-sm">
+              <span class="material-symbols-outlined text-primary text-2xl">hourglass_bottom</span>
+              <h4 class="font-display font-bold mt-2 mb-1">정보 손실은 가장 나중에</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">리사이즈와 압축은 되돌릴 수 없어서 보정과 측정을 모두 끝낸 뒤에 둡니다.</p>
+            </div>
+            <div class="p-5 bg-surface rounded-xl shadow-sm">
+              <span class="material-symbols-outlined text-primary text-2xl">straighten</span>
+              <h4 class="font-display font-bold mt-2 mb-1">측정은 원본에서</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">블러·과노출 같은 품질 지표는 보정을 거치면 왜곡되므로, 측정 후에 보정합니다.</p>
+            </div>
+            <div class="p-5 bg-surface rounded-xl shadow-sm">
+              <span class="material-symbols-outlined text-primary text-2xl">shield</span>
+              <h4 class="font-display font-bold mt-2 mb-1">지우지 말고 견디게</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">복원 필터는 무겁고 새 아티팩트를 만듭니다. 학습 시 증강으로 넣는 편이 싸고 안전합니다.</p>
+            </div>
+            <div class="p-5 bg-surface rounded-xl shadow-sm">
+              <span class="material-symbols-outlined text-primary text-2xl">sync_alt</span>
+              <h4 class="font-display font-bold mt-2 mb-1">학습 = 추론</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">결정적 전처리는 바이트 단위로 같아야 합니다. 공통 모듈 하나를 두 곳에서 불러 씁니다.</p>
+            </div>
+            <div class="p-5 bg-surface rounded-xl shadow-sm">
+              <span class="material-symbols-outlined text-primary text-2xl">palette</span>
+              <h4 class="font-display font-bold mt-2 mb-1">색을 지킵니다</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">흰 안전모·형광 조끼는 색 자체가 단서입니다. 밝기(L)만 다루고 a·b 채널과 Hue는 거의 건드리지 않습니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. 학습용 전처리 -->
+        <div id="data-train" class="mt-16">
+          <span class="label text-on-surface-variant">03 · TRAINING PIPELINE (OFFLINE)</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">학습용 전처리 11단계</h3>
+          <p class="text-on-surface-variant mb-6">1~5단계는 데이터를 정제하고, 6~7단계는 라벨과 분할을, 8~11단계는 모델 입력을 만듭니다.</p>
+          <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[820px] text-left text-sm">
+                <thead>
+                  <tr class="bg-surface-container label"><th class="p-3 w-10">#</th><th class="p-3">기법</th><th class="p-3">적용 이유 (현장 근거)</th><th class="p-3">추천 초기값</th><th class="p-3 w-16">비용</th></tr>
+                </thead>
+                <tbody class="divide-y divide-outline-variant/40 align-top">
+                  <tr class="bg-surface-container-low"><td colspan="5" class="px-3 py-2 label text-tertiary-container">정제 · STEP 1–5</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">1</td><td class="p-3 font-semibold">프레임 샘플링 + 중복 제거 (pHash/SSIM)</td><td class="p-3 text-on-surface-variant">저속 주행(G7)이라 연속 프레임이 거의 같습니다. 라벨링 비용과 데이터 누수를 줄입니다.</td><td class="p-3">30fps → 2fps, pHash 해밍거리 ≤ 6이면 중복</td><td class="p-3 text-on-surface-variant">경량</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">2</td><td class="p-3 font-semibold">원본 기준 품질 태깅 <span class="text-tertiary-container">★</span></td><td class="p-3 text-on-surface-variant">자갈길 진동(A3), 섬광(B6), 렌즈 오염(C4)으로 못 쓰는 프레임을 찾습니다.</td><td class="p-3">Laplacian 분산 &lt; 60 → blur<br>포화 픽셀(≥ 250) &gt; 15% → flash</td><td class="p-3 text-on-surface-variant">경량</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">3</td><td class="p-3 font-semibold">태그 기반 선별</td><td class="p-3 text-on-surface-variant">심한 프레임은 라벨 품질을 떨어뜨리고, 경미한 것은 강건성을 위해 남깁니다.</td><td class="p-3">심각 → 제외, 경미 → 약 10~15% 유지</td><td class="p-3 text-on-surface-variant">경량</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">4</td><td class="p-3 font-semibold">(선택) 약한 Gray-World 화이트밸런스</td><td class="p-3 text-on-surface-variant">자연광만 있어 편차는 작습니다(B4). 흰 안전모·눈이 기준점을 망치지 않게 약하게만 씁니다.</td><td class="p-3">포화 영역(≥ 240) 제외, 원본과 50:50 블렌드</td><td class="p-3 text-on-surface-variant">경량</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">5</td><td class="p-3 font-semibold">CLAHE (LAB의 L 채널) <span class="text-tertiary-container">★</span></td><td class="p-3 text-on-surface-variant">역광(B3)과 머리 그림자(B7)로 머리 영역 밝기 편차가 큽니다. 지역 보정이 필요하고 색은 유지됩니다.</td><td class="p-3">clipLimit 2.0, tileGrid 8×8</td><td class="p-3 text-on-surface-variant">경량</td></tr>
+                  <tr class="bg-surface-container-low"><td colspan="5" class="px-3 py-2 label text-tertiary-container">라벨 · 분할 · STEP 6–7</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">6</td><td class="p-3 font-semibold">라벨링 (바운딩 박스)</td><td class="p-3 text-on-surface-variant">보정된 이미지에서는 그림자 속 머리도 잘 보여 라벨 품질이 올라갑니다.</td><td class="p-3">아래 클래스 정의 참고</td><td class="p-3 text-on-surface-variant">수작업</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">7</td><td class="p-3 font-semibold">날짜·구역 단위 분할</td><td class="p-3 text-on-surface-variant">보유 데이터가 없어(I2) 같은 날 프레임이 train과 test에 섞일 위험이 큽니다.</td><td class="p-3">70 / 15 / 15, 날짜별 그룹</td><td class="p-3 text-on-surface-variant">경량</td></tr>
+                  <tr class="bg-surface-container-low"><td colspan="5" class="px-3 py-2 label text-tertiary-container">모델 입력 · STEP 8–11</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">8</td><td class="p-3 font-semibold">고해상도 유지 / 타일링 <span class="text-tertiary-container">★</span></td><td class="p-3 text-on-surface-variant">20m 안전모(약 13px)를 살리려면 축소하면 안 됩니다(E2).</td><td class="p-3">imgsz 1280, 또는 640 타일 2×1 겹침 20%</td><td class="p-3 text-on-surface-variant">중간</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">9</td><td class="p-3 font-semibold">열화 증강 (train만)</td><td class="p-3 text-on-surface-variant">비·눈(C2), 먼지(C1), 렌즈 오염(C4), 그림자(B7), 역광(B3), 진동 블러(A3)를 견디게 합니다.</td><td class="p-3">아래 증강 목록 참고</td><td class="p-3 text-on-surface-variant">중간</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">10</td><td class="p-3 font-semibold">불균형 대응</td><td class="p-3 text-on-surface-variant">미착용 1~10%(F5)라 모델이 "항상 착용"으로 치우칩니다.</td><td class="p-3">미착용 이미지 ×3~5 반복, Copy-Paste, Focal loss γ=1.5</td><td class="p-3 text-on-surface-variant">경량</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">11</td><td class="p-3 font-semibold">Hard Negative 추가</td><td class="p-3 text-on-surface-variant">주황 콘, 형광 안전망, 바닥 안전모(D2), 형광 작업복(E6) 오탐을 줄입니다.</td><td class="p-3">전체의 10~20%</td><td class="p-3 text-on-surface-variant">수작업</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="mt-3 text-xs text-on-surface-variant"><span class="text-tertiary-container">★</span> 표시 단계는 추론에서도 같은 설정, 같은 코드로 실행합니다.</p>
+          </div>
+
+          <div class="mt-5 grid grid-cols-1 lg:grid-cols-5 gap-5">
+            <div class="lg:col-span-2 p-6 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display text-lg font-bold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">label</span>클래스 정의</h4>
+              <div class="flex flex-wrap gap-1.5 mb-4 font-mono text-xs">
+                <span class="px-2 py-1 rounded bg-surface-container-high">person</span>
+                <span class="px-2 py-1 rounded bg-surface-container-high">head_helmet</span>
+                <span class="px-2 py-1 rounded bg-error-container text-on-error-container">head_no_helmet</span>
+                <span class="px-2 py-1 rounded bg-surface-container-high">vest</span>
+                <span class="px-2 py-1 rounded bg-error-container text-on-error-container">no_vest (상체)</span>
+              </div>
+              <ul class="space-y-2.5 text-sm text-on-surface-variant">
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">chevron_right</span>바닥에 놓인 안전모는 라벨하지 않습니다. 사람 머리 영역에 있을 때만 착용으로 인정합니다.</li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">chevron_right</span>안전화는 10m 이내만 라벨하고, 높이 8px 미만은 ignore로 처리합니다.</li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">chevron_right</span>방한복 위에 조끼를 입으면 vest, 방한복이 조끼를 덮으면 no_vest입니다.</li>
+              </ul>
+            </div>
+            <div class="lg:col-span-3 p-6 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display text-lg font-bold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">thunderstorm</span>열화 증강 목록 <span class="text-sm font-normal text-on-surface-variant">(Albumentations 2.x)</span></h4>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[480px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">현장 조건</th><th class="p-2.5">증강</th><th class="p-2.5 text-right">확률</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5">머리 그림자 (B7)</td><td class="p-2.5">RandomShadow, 화면 상단 60%</td><td class="p-2.5 text-right font-display font-bold text-primary">0.3</td></tr>
+                    <tr><td class="p-2.5">역광 (B3)</td><td class="p-2.5">RandomSunFlare, 상단 40%</td><td class="p-2.5 text-right font-display font-bold text-primary">0.1</td></tr>
+                    <tr><td class="p-2.5">밝기 변화</td><td class="p-2.5">RandomBrightnessContrast ±0.25</td><td class="p-2.5 text-right font-display font-bold text-primary">0.5</td></tr>
+                    <tr><td class="p-2.5">비·눈·먼지·렌즈 오염 (C1, C2, C4)</td><td class="p-2.5">OneOf: RandomRain / RandomSnow / RandomFog / Spatter</td><td class="p-2.5 text-right font-display font-bold text-primary">0.35</td></tr>
+                    <tr><td class="p-2.5">진동 블러 (A3, E5)</td><td class="p-2.5">OneOf: MotionBlur 3~9 / GaussianBlur 3~5</td><td class="p-2.5 text-right font-display font-bold text-primary">0.25</td></tr>
+                    <tr><td class="p-2.5">부분 가림 (E4)</td><td class="p-2.5">CoarseDropout, 구멍 1~4개</td><td class="p-2.5 text-right font-display font-bold text-primary">0.3</td></tr>
+                    <tr><td class="p-2.5">색 유지 (F2, F3)</td><td class="p-2.5">HueSaturationValue, hue ±5로 제한</td><td class="p-2.5 text-right font-display font-bold text-primary">0.3</td></tr>
+                    <tr><td class="p-2.5">전송 압축 (H4)</td><td class="p-2.5">ImageCompression, 품질 60~95</td><td class="p-2.5 text-right font-display font-bold text-primary">0.3</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. 추론용 전처리 -->
+        <div id="data-infer" class="mt-16">
+          <span class="label text-on-surface-variant">04 · INFERENCE PIPELINE (ON-BOARD)</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">추론용 전처리</h3>
+          <p class="text-on-surface-variant mb-6">추론 위치와 디바이스(H1, H2)가 미정이라 Jetson Orin NX 16GB + TensorRT FP16을 기준으로 가정했습니다.</p>
+
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+            <div class="p-5 bg-primary text-on-primary rounded-xl shadow-sm">
+              <span class="label text-tertiary-fixed">판정 1회 소요</span>
+              <p class="font-display text-2xl lg:text-3xl font-bold mt-1">50~80ms</p>
+            </div>
+            <div class="p-5 bg-surface rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">요구 응답 시간 (H3)</span>
+              <p class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1">1초</p>
+            </div>
+            <div class="p-5 bg-surface rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">입력 해상도</span>
+              <p class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1">1280×736</p>
+            </div>
+            <div class="p-5 bg-surface rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">경보 조건</span>
+              <p class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1">5회 중 3회</p>
+            </div>
+          </div>
+
+          <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[820px] text-left text-sm">
+                <thead>
+                  <tr class="bg-surface-container label"><th class="p-3 w-10">#</th><th class="p-3">기법</th><th class="p-3">적용 이유 (현장 근거)</th><th class="p-3">추천 초기값</th><th class="p-3 w-24 text-right">시간 예산</th></tr>
+                </thead>
+                <tbody class="divide-y divide-outline-variant/40 align-top">
+                  <tr><td class="p-3 font-display font-bold text-primary">0</td><td class="p-3 font-semibold">카메라 설정 (하드웨어)</td><td class="p-3 text-on-surface-variant">블러와 역광은 촬영 단계에서 막는 것이 가장 쌉니다(A3, B3).</td><td class="p-3">셔터 ≤ 1/500s, WDR 켜기, 측광 영역을 화면 상단 중앙으로</td><td class="p-3 text-right font-display font-bold">0ms</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">1</td><td class="p-3 font-semibold">최선 프레임 선택</td><td class="p-3 text-on-surface-variant">1초 여유로 자갈길 진동 프레임을 피합니다. 영상 안정화보다 싸고 효과가 확실합니다.</td><td class="p-3">0.3초 버퍼(약 9프레임)에서 Laplacian 분산 최대</td><td class="p-3 text-right font-display font-bold">약 5ms</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">2</td><td class="p-3 font-semibold">품질 게이트 <span class="text-tertiary-container">★</span></td><td class="p-3 text-on-surface-variant">섬광(B6)이나 렌즈 오염(C4) 프레임은 추론하지 않고 건너뜁니다.</td><td class="p-3">포화 &gt; 15% → skip, 오염 점검은 10초마다</td><td class="p-3 text-right font-display font-bold">약 2ms</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">3</td><td class="p-3 font-semibold">CLAHE (L 채널) <span class="text-tertiary-container">★</span></td><td class="p-3 text-on-surface-variant">학습과 같은 분포를 만듭니다. 설정이 다르면 성능이 떨어집니다.</td><td class="p-3">clip 2.0, tile 8×8 (학습과 동일)</td><td class="p-3 text-right font-display font-bold">약 3~5ms</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">4</td><td class="p-3 font-semibold">Letterbox 1280 (또는 2타일) <span class="text-tertiary-container">★</span></td><td class="p-3 text-on-surface-variant">원본을 축소하지 않아 원거리 안전모를 살립니다(E2).</td><td class="p-3">1280×736</td><td class="p-3 text-right font-display font-bold">약 1ms</td></tr>
+                  <tr class="bg-surface-container-low"><td class="p-3 font-display font-bold text-primary">5</td><td class="p-3 font-semibold">검출 모델</td><td class="p-3 text-on-surface-variant">—</td><td class="p-3">YOLOv8s/11s @1280</td><td class="p-3 text-right font-display font-bold">약 30~60ms</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">6</td><td class="p-3 font-semibold">사람–보호구 연결</td><td class="p-3 text-on-surface-variant">바닥 안전모와 주황 콘 오탐(D2)을 없앱니다.</td><td class="p-3">머리 박스가 사람 박스 상단 25% 안에 있을 때만 인정</td><td class="p-3 text-right font-display font-bold">1ms 미만</td></tr>
+                  <tr><td class="p-3 font-display font-bold text-primary">7</td><td class="p-3 font-semibold">시간축 투표 + 추적</td><td class="p-3 text-on-surface-variant">한 프레임 오판으로 경보가 울리지 않게 하고, 비·눈 프레임의 일시적 오류도 흡수합니다.</td><td class="p-3">ByteTrack ID 기준, 최근 5회 중 3회 이상 미착용이면 경보</td><td class="p-3 text-right font-display font-bold">약 2ms</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-4 p-4 bg-surface-container rounded-lg flex items-start gap-3 text-sm text-on-surface-variant">
+              <span class="material-symbols-outlined text-primary">cloud_sync</span>
+              <span>현장 통신이 안정적이라면(H4) 엣지에서는 0~4단계만 하고 서버에서 5~7단계를 처리하는 구조도 가능합니다. 이 경우 전송 압축이 더해지므로 학습 증강의 ImageCompression 확률을 0.5로 올립니다.</span>
+            </div>
+          </div>
+
+          <details class="mt-5 group bg-inverse-surface text-inverse-on-surface rounded-xl overflow-hidden">
+            <summary class="cursor-pointer list-none p-5 flex items-center justify-between gap-3">
+              <span class="flex items-center gap-2 font-display font-bold"><span class="material-symbols-outlined text-tertiary-fixed">code</span>공통 전처리 코드 (학습·추론 동일 모듈)</span>
+              <span class="material-symbols-outlined transition-transform group-open:rotate-180">expand_more</span>
+            </summary>
+            <pre class="px-5 pb-5 overflow-x-auto text-[0.8rem] leading-relaxed font-mono"><code>import cv2
+import numpy as np
+
+CLAHE = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+def blur_score(bgr):
+    # 반드시 원본에서 계산
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    return cv2.Laplacian(gray, cv2.CV_64F).var()
+
+def saturation_ratio(bgr, thr=250):
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    return float((gray &gt;= thr).mean())
+
+def clahe_l(bgr):
+    lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    return cv2.cvtColor(cv2.merge([CLAHE.apply(l), a, b]), cv2.COLOR_LAB2BGR)
+
+def preprocess(bgr):
+    # 리사이즈·타일링은 이 함수 다음에
+    return clahe_l(bgr)</code></pre>
+          </details>
+        </div>
+
+        <!-- 5. 순서 근거 -->
+        <div id="data-order" class="mt-16">
+          <span class="label text-on-surface-variant">05 · WHY THIS ORDER</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">측정 → 색 → 밝기 → 크기 → 증강</h3>
+          <p class="text-on-surface-variant mb-6">앞쪽일수록 정보를 보존하는 단계이고, 뒤쪽일수록 정보를 바꾸거나 줄이는 단계입니다. 각 단계는 앞 단계의 결과가 있어야 제대로 동작합니다.</p>
+
+          <ol class="grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-4 gap-3">
+            <li class="relative p-5 bg-surface rounded-xl shadow-sm">
+              <span class="label text-tertiary-container">STAGE 1 · 측정</span>
+              <h4 class="font-display font-bold mt-1 mb-3">원본 그대로 측정</h4>
+              <p class="text-sm">중복 제거 → <b class="text-primary">★ 품질 게이트</b></p>
+              <span class="hidden md:flex absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-primary text-on-primary items-center justify-center"><span class="material-symbols-outlined text-sm">arrow_forward</span></span>
+            </li>
+            <li class="relative p-5 bg-surface rounded-xl shadow-sm">
+              <span class="label text-tertiary-container">STAGE 2 · 보정</span>
+              <h4 class="font-display font-bold mt-1 mb-3">색 먼저, 밝기 다음</h4>
+              <p class="text-sm">화이트밸런스 → <b class="text-primary">★ CLAHE (L 채널)</b></p>
+              <span class="hidden md:flex absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-primary text-on-primary items-center justify-center"><span class="material-symbols-outlined text-sm">arrow_forward</span></span>
+            </li>
+            <li class="relative p-5 bg-surface rounded-xl shadow-sm">
+              <span class="label text-tertiary-container">STAGE 3 · 고정</span>
+              <h4 class="font-display font-bold mt-1 mb-3">보정본으로 라벨·분할</h4>
+              <p class="text-sm">라벨링 → 날짜별 분할</p>
+              <span class="hidden md:flex absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-primary text-on-primary items-center justify-center"><span class="material-symbols-outlined text-sm">arrow_forward</span></span>
+            </li>
+            <li class="p-5 bg-primary text-on-primary rounded-xl shadow-sm">
+              <span class="label text-tertiary-fixed">STAGE 4 · 변형</span>
+              <h4 class="font-display font-bold mt-1 mb-3">되돌릴 수 없는 단계</h4>
+              <p class="text-sm"><b>★ 리사이즈·타일</b> → 증강 (train만)</p>
+            </li>
+          </ol>
+          <p class="mt-3 text-sm text-on-surface-variant">★ 세 단계(품질 게이트 · CLAHE · 1280 유지)는 추론에서도 학습과 똑같은 설정의 같은 코드로 실행합니다. 나머지는 학습 데이터를 만들 때만 씁니다.</p>
+
+          <details class="mt-5 group bg-surface rounded-xl shadow-sm overflow-hidden">
+            <summary class="cursor-pointer list-none p-5 flex items-center justify-between gap-3">
+              <span class="font-display font-bold">단계별 의존 관계 자세히 보기</span>
+              <span class="material-symbols-outlined transition-transform group-open:rotate-180">expand_more</span>
+            </summary>
+            <div class="px-5 pb-5 overflow-x-auto">
+              <table class="w-full min-w-[640px] text-left text-sm">
+                <thead><tr class="bg-surface-container label"><th class="p-3">단계</th><th class="p-3">이 위치여야 하는 이유</th><th class="p-3">앞에 와야 하는 것</th></tr></thead>
+                <tbody class="divide-y divide-outline-variant/40 align-top">
+                  <tr><td class="p-3 font-semibold text-primary">중복 제거</td><td class="p-3 text-on-surface-variant">데이터 양을 줄여 이후 모든 단계의 비용을 낮춥니다. 분할보다 앞서야 누수가 없습니다.</td><td class="p-3">없음 (항상 처음)</td></tr>
+                  <tr><td class="p-3 font-semibold text-primary">품질 게이트</td><td class="p-3 text-on-surface-variant">블러·포화 지표는 원본에서만 정확합니다. 나쁜 프레임을 미리 빼면 보정 비용도 줄어듭니다.</td><td class="p-3">중복 제거</td></tr>
+                  <tr><td class="p-3 font-semibold text-primary">화이트밸런스</td><td class="p-3 text-on-surface-variant">색 채널 비율을 바로잡는 일이라, 밝기 보정 뒤에 하면 바뀐 히스토그램을 기준으로 삼게 됩니다.</td><td class="p-3">품질 게이트 (섬광 프레임 제거)</td></tr>
+                  <tr><td class="p-3 font-semibold text-primary">CLAHE</td><td class="p-3 text-on-surface-variant">색이 바로잡힌 뒤 L 채널만 다뤄야 색상이 흔들리지 않습니다. 전체 해상도에서 해야 타일 간 밝기가 일정합니다.</td><td class="p-3">화이트밸런스</td></tr>
+                  <tr><td class="p-3 font-semibold text-primary">라벨링</td><td class="p-3 text-on-surface-variant">보정된 이미지에서 그림자 속 머리가 보여 라벨이 정확해집니다.</td><td class="p-3">CLAHE</td></tr>
+                  <tr><td class="p-3 font-semibold text-primary">리사이즈·타일링</td><td class="p-3 text-on-surface-variant">되돌릴 수 없는 정보 손실이라 보정과 측정이 모두 끝난 뒤에 합니다.</td><td class="p-3">CLAHE, 라벨링</td></tr>
+                  <tr><td class="p-3 font-semibold text-primary">열화 증강</td><td class="p-3 text-on-surface-variant">학습 직전에 매번 무작위로 적용합니다. train에만 적용하려면 분할이 먼저여야 합니다.</td><td class="p-3">분할, 리사이즈</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+          <div class="mt-5 bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+            <h4 class="font-display text-lg font-bold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-error">warning</span>순서를 바꾸면 생기는 문제</h4>
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[720px] text-left text-sm">
+                <thead><tr class="bg-surface-container label"><th class="p-3">잘못된 순서</th><th class="p-3">생기는 문제</th><th class="p-3">이 현장에서의 영향</th></tr></thead>
+                <tbody class="divide-y divide-outline-variant/40 align-top">
+                  <tr><td class="p-3 font-semibold text-error whitespace-nowrap">CLAHE → 품질 게이트</td><td class="p-3 text-on-surface-variant">CLAHE가 노이즈를 키워 Laplacian 분산이 올라갑니다. 흐린 프레임이 선명한 것처럼 통과합니다.</td><td class="p-3">자갈길 진동 프레임이 학습에 섞입니다.</td></tr>
+                  <tr><td class="p-3 font-semibold text-error whitespace-nowrap">Dehaze → 화이트밸런스</td><td class="p-3 text-on-surface-variant">Dark Channel Prior는 가장 밝은 픽셀로 대기광을 추정해, 흰 안전모·눈이 대기광으로 잡혀 색이 틀어집니다.</td><td class="p-3">흰 안전모(F2)가 회색·푸른빛으로 변합니다.</td></tr>
+                  <tr><td class="p-3 font-semibold text-error whitespace-nowrap">리사이즈(640) → 보정</td><td class="p-3 text-on-surface-variant">이미 사라진 픽셀은 보정으로 돌아오지 않습니다.</td><td class="p-3">20m 안전모가 약 6px이 됩니다.</td></tr>
+                  <tr><td class="p-3 font-semibold text-error whitespace-nowrap">타일 분할 → CLAHE</td><td class="p-3 text-on-surface-variant">타일마다 히스토그램이 달라 같은 사람이 경계에서 밝기가 달라집니다.</td><td class="p-3">타일 경계에 걸친 작업자 오판이 늘어납니다.</td></tr>
+                  <tr><td class="p-3 font-semibold text-error whitespace-nowrap">분할 → 중복 제거</td><td class="p-3 text-on-surface-variant">거의 같은 프레임이 train과 test에 섞여 성능이 부풀려집니다.</td><td class="p-3">저속 주행이라 중복이 특히 많습니다.</td></tr>
+                  <tr><td class="p-3 font-semibold text-error whitespace-nowrap">val/test에도 증강</td><td class="p-3 text-on-surface-variant">평가 기준이 매번 달라져 실험끼리 비교할 수 없습니다.</td><td class="p-3">검증 실험 결과를 믿을 수 없습니다.</td></tr>
+                  <tr><td class="p-3 font-semibold text-error whitespace-nowrap">학습·추론 불일치</td><td class="p-3 text-on-surface-variant">학습 때 본 분포와 실제 입력이 달라집니다.</td><td class="p-3">현장 성능이 가장 크게 떨어지는 흔한 원인입니다.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. 제외한 기법 -->
+        <div id="data-excluded" class="mt-16">
+          <span class="label text-on-surface-variant">06 · EXCLUDED TECHNIQUES</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">일부러 뺀 기법</h3>
+          <p class="text-on-surface-variant mb-6">이 현장에서 얻는 효과보다 비용이나 부작용이 커서 기본 파이프라인에서 뺐습니다. 검증 실험에서 이득이 확인되면 다시 넣을 수 있습니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display font-bold mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-outline">block</span>Dehaze</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed mb-3">먼지가 약간인 수준(C1)이고, 흰 안전모·눈이 대기광 추정을 망칩니다. 연산도 무겁습니다.</p>
+              <p class="mt-auto text-xs pt-3 border-t border-outline-variant/50"><span class="label text-tertiary-container">재검토</span> 분진이 심한 공정으로 확대할 때</p>
+            </div>
+            <div class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display font-bold mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-outline">block</span>De-raining / De-snowing</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed mb-3">딥러닝 복원 모델은 엣지에서 느리고 작은 안전모 디테일을 뭉갤 수 있습니다. 증강과 시간축 투표로 대신합니다.</p>
+              <p class="mt-auto text-xs pt-3 border-t border-outline-variant/50"><span class="label text-tertiary-container">재검토</span> 비·눈 조건 Recall이 맑은 날보다 10%p 이상 낮을 때</p>
+            </div>
+            <div class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display font-bold mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-outline">block</span>디지털 영상 안정화</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed mb-3">프레임 단위 검출이라 프레임 간 정렬이 필요 없습니다. 최선 프레임 선택이 더 싸고 확실합니다.</p>
+              <p class="mt-auto text-xs pt-3 border-t border-outline-variant/50"><span class="label text-tertiary-container">재검토</span> 영상 기반 행동 인식을 추가할 때</p>
+            </div>
+            <div class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display font-bold mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-outline">block</span>디블러링</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed mb-3">저속 주행·보행 속도에서는 빠른 셔터와 프레임 선택으로 충분합니다. 복원 아티팩트 위험도 있습니다.</p>
+              <p class="mt-auto text-xs pt-3 border-t border-outline-variant/50"><span class="label text-tertiary-container">재검토</span> 주행 속도를 1m/s 이상으로 올릴 때</p>
+            </div>
+            <div class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display font-bold mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-outline">block</span>초해상화</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed mb-3">13px 안전모에서 없는 디테일을 만들어내 오판 위험이 있고 연산도 무겁습니다. 카메라 해상도를 올리는 것이 맞습니다.</p>
+              <p class="mt-auto text-xs pt-3 border-t border-outline-variant/50"><span class="label text-tertiary-container">재검토</span> 카메라 교체가 불가능할 때</p>
+            </div>
+            <div class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display font-bold mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-outline">block</span>렌즈 왜곡 보정</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed mb-3">표준 화각(70° 미만, G4)이라 가장자리 왜곡이 작습니다.</p>
+              <p class="mt-auto text-xs pt-3 border-t border-outline-variant/50"><span class="label text-tertiary-container">재검토</span> 광각·어안 렌즈로 바꿀 때</p>
+            </div>
+            <div class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display font-bold mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-outline">block</span>플리커 보정</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed mb-3">인공조명이 없고 플리커도 관찰되지 않았습니다(B4, B5).</p>
+              <p class="mt-auto text-xs pt-3 border-t border-outline-variant/50"><span class="label text-tertiary-container">재검토</span> 야간 작업을 추가할 때</p>
+            </div>
+            <div class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display font-bold mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-outline">block</span>얼굴 비식별화</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed mb-3">현장 정책상 제약이 없습니다(I1). 머리 영역을 가리면 안전모 검출에도 불리합니다.</p>
+              <p class="mt-auto text-xs pt-3 border-t border-outline-variant/50"><span class="label text-tertiary-container">재검토</span> 정책이 바뀌면 판정 후 저장 단계에만 적용</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 7. 검증 실험 설계 -->
+        <div id="data-validate" class="mt-16">
+          <span class="label text-on-surface-variant">07 · ABLATION STUDY</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">한 번에 하나씩 바꿔 검증합니다</h3>
+          <p class="text-on-surface-variant mb-6">Ablation 실험 7개로 전처리 효과를 확인합니다. 주 지표는 <b class="text-on-surface">미착용 클래스의 Recall @ Precision ≥ 0.9</b>입니다. 미착용을 놓치는 것이 가장 비싼 오류이기 때문입니다.</p>
+
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-5 gap-5">
+            <div class="lg:col-span-3 bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+              <div class="flex items-center justify-between mb-4">
+                <h4 class="font-display text-lg font-bold">비교군</h4>
+                <span class="label bg-surface-container px-3 py-1 rounded">시드 3개 평균</span>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[520px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">실험</th><th class="p-2.5">구성</th><th class="p-2.5">확인하려는 것</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40 align-top">
+                    <tr><td class="p-2.5 font-display font-bold text-primary">B0</td><td class="p-2.5">원본, imgsz 640</td><td class="p-2.5 text-on-surface-variant">기준선</td></tr>
+                    <tr><td class="p-2.5 font-display font-bold text-primary">B1</td><td class="p-2.5">B0 + imgsz 1280</td><td class="p-2.5 text-on-surface-variant">해상도 유지 효과 <span class="text-tertiary-container font-semibold">(가장 클 것으로 예상)</span></td></tr>
+                    <tr><td class="p-2.5 font-display font-bold text-primary">B2</td><td class="p-2.5">B1 + CLAHE</td><td class="p-2.5 text-on-surface-variant">역광·그림자 조건 Recall 변화</td></tr>
+                    <tr><td class="p-2.5 font-display font-bold text-primary">B3</td><td class="p-2.5">B2 + 품질 게이트</td><td class="p-2.5 text-on-surface-variant">라벨 품질과 블러 조건 성능</td></tr>
+                    <tr><td class="p-2.5 font-display font-bold text-primary">B4</td><td class="p-2.5">B3 + 열화 증강</td><td class="p-2.5 text-on-surface-variant">비·눈·먼지 조건 강건성</td></tr>
+                    <tr><td class="p-2.5 font-display font-bold text-primary">B5</td><td class="p-2.5">B4 + 타일링</td><td class="p-2.5 text-on-surface-variant">15–20m 구간 소형 객체 AP</td></tr>
+                    <tr><td class="p-2.5 font-display font-bold text-primary">B6</td><td class="p-2.5">B5 + 불균형 대응 + Hard Negative</td><td class="p-2.5 text-on-surface-variant">미착용 Recall과 오경보 수</td></tr>
+                    <tr><td class="p-2.5 font-display font-bold text-outline">B7</td><td class="p-2.5">(선택) B6 + 추론 단계 Dehaze 또는 De-rain</td><td class="p-2.5 text-on-surface-variant">제외한 기법의 재도입 여부</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="lg:col-span-2 flex flex-col gap-5">
+              <div class="p-6 bg-surface rounded-xl shadow-sm">
+                <h4 class="font-display text-lg font-bold mb-3">테스트셋</h4>
+                <ul class="space-y-2 text-sm text-on-surface-variant">
+                  <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>학습에 쓰지 않은 날짜·구역의 데이터로만 만듭니다.</li>
+                  <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>미착용 객체를 300개 이상 확보합니다. 부족하면 안전한 구역에서 연출 촬영을 합니다.</li>
+                  <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>조건 태그: 역광, 비·눈, 먼지, 거리(10–15m / 15–20m), 가림, 블러</li>
+                </ul>
+              </div>
+              <div class="p-6 bg-surface rounded-xl shadow-sm">
+                <h4 class="font-display text-lg font-bold mb-3">평가 지표</h4>
+                <dl class="divide-y divide-outline-variant/50 text-sm">
+                  <div class="py-2.5"><dt class="label text-tertiary-container">주 지표</dt><dd class="mt-0.5">head_no_helmet, no_vest Recall @ Precision ≥ 0.9</dd></div>
+                  <div class="py-2.5"><dt class="label text-on-surface-variant">보조</dt><dd class="mt-0.5">클래스별 mAP50, mAP50-95, APsmall, 거리 구간별 Recall</dd></div>
+                  <div class="py-2.5"><dt class="label text-on-surface-variant">운영</dt><dd class="mt-0.5">시간당 오경보 수, 이벤트 단위 Recall(시간축 투표 후), p95 지연 시간</dd></div>
+                  <div class="py-2.5"><dt class="label text-on-surface-variant">신뢰도</dt><dd class="mt-0.5">부트스트랩 95% 신뢰구간</dd></div>
+                </dl>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-5 p-6 bg-surface rounded-xl shadow-sm">
+            <h4 class="font-display text-lg font-bold mb-4">오탐·미탐 분석</h4>
+            <ol class="grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-3 gap-5 text-sm">
+              <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">1</span><span class="text-on-surface-variant">FP와 FN을 모두 뽑아 원인 태그를 붙입니다: 콘, 바닥 안전모, 형광 작업복, 안전망, 흰 안전모와 하늘, 그림자, 블러, 원거리, 가림, 방한복.</span></li>
+              <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">2</span><span class="text-on-surface-variant">원인 × 비교군 표를 만들어 어떤 전처리가 어떤 오류를 줄였는지 확인합니다.</span></li>
+              <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">3</span><span class="text-on-surface-variant">상위 원인을 다음 데이터 수집(Hard Negative) 목록에 반영합니다.</span></li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- 8. 하드웨어 권고와 추가 조사 -->
+        <div id="data-hw" class="mt-16">
+          <span class="label text-on-surface-variant">08 · HARDWARE & OPEN ITEMS</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">하드웨어 권고와 추가 조사 항목</h3>
+          <p class="text-on-surface-variant mb-6">카메라 높이와 해상도를 바꾸면 핵심 문제 1, 2, 4가 전처리보다 훨씬 크게 줄어듭니다.</p>
+
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">photo_camera</span>하드웨어 권고</h4>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[520px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">항목</th><th class="p-2.5">현재 → 권고</th><th class="p-2.5">기대 효과</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40 align-top">
+                    <tr><td class="p-2.5 font-semibold text-primary">높이·각도</td><td class="p-2.5"><span class="text-on-surface-variant">0.5m 미만, 올려봄</span><br>→ <b>1.2~1.6m, 수평</b></td><td class="p-2.5 text-on-surface-variant">하늘 배경·역광이 줄고 자갈·장비 가림도 줄어듭니다.</td></tr>
+                    <tr><td class="p-2.5 font-semibold text-primary">해상도</td><td class="p-2.5"><span class="text-on-surface-variant">720p</span><br>→ <b>1080p 이상</b> 또는 더 좁은 화각</td><td class="p-2.5 text-on-surface-variant">15m 안전모가 약 17px → 약 26px로 커집니다.</td></tr>
+                    <tr><td class="p-2.5 font-semibold text-primary">노출</td><td class="p-2.5"><span class="text-on-surface-variant">미확인</span><br>→ <b>WDR/HDR, 셔터 ≤ 1/500s</b></td><td class="p-2.5 text-on-surface-variant">역광과 진동 블러를 촬영 단계에서 막습니다.</td></tr>
+                    <tr><td class="p-2.5 font-semibold text-primary">렌즈 보호</td><td class="p-2.5"><span class="text-on-surface-variant">없음</span><br>→ <b>후드 + 발수 코팅</b></td><td class="p-2.5 text-on-surface-variant">비·눈·진흙 오염 프레임이 줄어듭니다.</td></tr>
+                    <tr><td class="p-2.5 font-semibold text-primary">셔터 방식</td><td class="p-2.5"><span class="text-on-surface-variant">모름</span><br>→ <b>글로벌 셔터 우선</b></td><td class="p-2.5 text-on-surface-variant">주행 중 젤로 왜곡이 없습니다.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">fact_check</span>추가 조사 항목</h4>
+              <ul class="space-y-2.5 text-sm">
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span><b>H1, H2</b> 추론 위치와 디바이스 확정 <span class="text-on-surface-variant">— 온보드 시간 예산이 달라집니다.</span></span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span><b>G5</b> FPS 확인 <span class="text-on-surface-variant">— 최선 프레임 버퍼 크기와 투표 주기를 정합니다.</span></span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span><b>G6</b> 셔터 방식 <span class="text-on-surface-variant">— 카메라를 빠르게 좌우로 돌려 세로선이 기울면 롤링 셔터입니다.</span></span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span><b>B2</b> 맑은 날 조도 재측정 <span class="text-on-surface-variant">— 300~1,000lx는 흐린 날 수준이며, 맑은 날은 10,000lx를 넘는 경우가 많습니다.</span></span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span><b>B6</b> 섬광의 실제 원인 <span class="text-on-surface-variant">— 금속·물웅덩이의 햇빛 반사일 수 있습니다.</span></span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span><b>F1</b> 안전화 점검 방식 <span class="text-on-surface-variant">— 현재 사양으로는 어려워 근거리 정지 점검 모드 분리를 검토합니다.</span></span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span>형광 작업복이 안전조끼로 인정되는지 현장 규정 확인</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span>흰색 외 안전모 색상(관리자·방문자용) 존재 여부</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span>눈 덮인 날의 빈도와 해당 조건 데이터 확보 계획</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span>카메라 높이 변경 가능 여부와 <b>G1</b> 로봇 플랫폼 확정</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span>대표 샘플 이미지 확보 <span class="text-on-surface-variant">— CLAHE·품질 게이트 임계값을 실제 이미지로 검증합니다.</span></span></li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

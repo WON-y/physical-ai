@@ -81,6 +81,7 @@
         <a class="hover:text-on-surface transition-colors" href="#spec">제품 스펙</a>
         <a class="hover:text-on-surface transition-colors" href="#kpi">성능 목표</a>
         <a class="hover:text-on-surface transition-colors" href="#data">데이터 전처리</a>
+        <a class="hover:text-on-surface transition-colors" href="#model">AI 모델</a>
         <a class="hover:text-on-surface transition-colors" href="#roi">도입 효과</a>
       </nav>
       <a href="#poc" class="inline-flex items-center gap-1 bg-primary-container text-on-primary hover:bg-primary text-sm px-4 py-2 rounded-lg transition-colors shadow-sm">
@@ -1096,6 +1097,269 @@ def preprocess(bgr):
                 <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span>눈 덮인 날의 빈도와 해당 조건 데이터 확보 계획</span></li>
                 <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span>카메라 높이 변경 가능 여부와 <b>G1</b> 로봇 플랫폼 확정</span></li>
                 <li class="flex gap-2"><span class="material-symbols-outlined text-outline">check_box_outline_blank</span><span>대표 샘플 이미지 확보 <span class="text-on-surface-variant">— CLAHE·품질 게이트 임계값을 실제 이미지로 검증합니다.</span></span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== AI 모델 선정·학습·검증 (report/yoloTraining.md) ===== -->
+    <section id="model" class="py-20 lg:py-28 bg-surface">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-10">
+          <span class="label text-tertiary-container">AI MODEL TRAINING</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">한 모델, 한 번의 추론으로<br class="hidden sm:block"> 사람과 보호구를 함께 봅니다</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">COCO로 사전학습된 YOLO26을 person·helmet·vest·head 4개 클래스로 파인튜닝해 단일 모델로 씁니다. n·s·m을 같은 조건으로 학습한 뒤, Jetson Orin NX(TensorRT FP16)에서 15 FPS 이상을 내는 모델 중 val 정확도가 가장 높은 것을 고릅니다.</p>
+          <p class="mt-3 label text-on-surface-variant">AI 모델 선정·학습·검증 보고서 · 2026-10-08</p>
+        </div>
+
+        <!-- 핵심 결정 -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="p-5 bg-primary text-on-primary rounded-xl shadow-sm">
+            <span class="label text-tertiary-fixed">1순위 후보</span>
+            <p class="font-display text-2xl lg:text-3xl font-bold mt-1">YOLO26s</p>
+          </div>
+          <div class="p-5 bg-surface-container-low rounded-xl shadow-sm">
+            <span class="label text-on-surface-variant">클래스</span>
+            <p class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1">4개</p>
+          </div>
+          <div class="p-5 bg-surface-container-low rounded-xl shadow-sm">
+            <span class="label text-on-surface-variant">Jetson 속도 조건</span>
+            <p class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1">≥ 15 FPS</p>
+          </div>
+          <div class="p-5 bg-surface-container-low rounded-xl shadow-sm">
+            <span class="label text-on-surface-variant">오탐 목표</span>
+            <p class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1">≤ 3건/일</p>
+          </div>
+        </div>
+
+        <div class="mt-5 bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr class="bg-surface-container label"><th class="p-3 w-32">구분</th><th class="p-3">결정</th></tr>
+              </thead>
+              <tbody class="divide-y divide-outline-variant/40 align-top">
+                <tr><td class="p-3 font-semibold text-primary">모델</td><td class="p-3">YOLO26 n·s·m 중 선정 (후보 s). 프레임당 추론 1회</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">학습 방식</td><td class="p-3">COCO <code class="font-mono text-xs px-1 py-0.5 rounded bg-surface-container-high">yolo26?.pt</code>에서 시작하는 파인튜닝. 특징 추출부는 그대로 가져오고 출력층은 4클래스로 새로 학습</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">클래스</td><td class="p-3">person, helmet, vest, head (head = 안전모를 쓰지 않은 머리)</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">person 라벨</td><td class="p-3">원래 라벨이 없는 데이터는 COCO 모델로 자동 라벨링. test셋은 사람이 검수</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">데이터</td><td class="p-3">Construction-PPE로 시작 → Hard Hat Workers·AIHub 보호구 클래스로 확장 → 자체 현장 데이터로 마무리</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">검증 1</td><td class="p-3">test셋 검출 성능: 클래스별 P·R·mAP50·mAP50-95, 조건별(거리·조도) 결과</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">검증 2</td><td class="p-3">사람 단위 착용 판정: 포함률 규칙, 미착용 Recall ≥ 0.95 / Precision ≥ 0.90</td></tr>
+                <tr><td class="p-3 font-semibold text-primary">최종</td><td class="p-3">Jetson 영상 이벤트 테스트: 연속 5프레임 확정, 오탐 ≤ 3건/로봇/일</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 섹션 내 목차 -->
+        <nav class="mt-10 flex flex-wrap gap-2 text-sm" aria-label="AI 모델 목차">
+          <a href="#model-select" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">모델 선정</a>
+          <a href="#model-finetune" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">파인튜닝 설계</a>
+          <a href="#model-data" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">학습 데이터</a>
+          <a href="#model-train" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">학습 절차</a>
+          <a href="#model-flow" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">전체 흐름</a>
+          <a href="#model-eval" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">검증</a>
+        </nav>
+
+        <!-- 1. 모델 선정 -->
+        <div id="model-select" class="mt-16">
+          <span class="label text-on-surface-variant">01 · MODEL SELECTION</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">YOLO26 n·s·m을 같은 조건으로 비교합니다</h3>
+          <p class="text-on-surface-variant mb-6">l·x는 Jetson Orin NX에서 15 FPS를 맞추기 어려워 제외합니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-3 gap-5">
+            <div class="flex flex-col p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">기준선</span>
+              <h4 class="font-display text-2xl font-bold mt-1">YOLO26n</h4>
+              <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div><dt class="label text-on-surface-variant">COCO mAP50-95</dt><dd class="font-display text-xl font-bold text-primary">40.9</dd></div>
+                <div><dt class="label text-on-surface-variant">T4 TensorRT</dt><dd class="font-display text-xl font-bold text-primary">1.7ms</dd></div>
+              </dl>
+            </div>
+            <div class="flex flex-col p-6 bg-primary text-on-primary rounded-xl shadow-md">
+              <span class="label text-tertiary-fixed">1순위 후보</span>
+              <h4 class="font-display text-2xl font-bold mt-1">YOLO26s</h4>
+              <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div><dt class="label opacity-80">COCO mAP50-95</dt><dd class="font-display text-xl font-bold">48.6</dd></div>
+                <div><dt class="label opacity-80">T4 TensorRT</dt><dd class="font-display text-xl font-bold">2.5ms</dd></div>
+              </dl>
+            </div>
+            <div class="flex flex-col p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">정확도 상한 확인</span>
+              <h4 class="font-display text-2xl font-bold mt-1">YOLO26m</h4>
+              <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div><dt class="label text-on-surface-variant">COCO mAP50-95</dt><dd class="font-display text-xl font-bold text-primary">53.1</dd></div>
+                <div><dt class="label text-on-surface-variant">T4 TensorRT</dt><dd class="font-display text-xl font-bold text-primary">4.7ms</dd></div>
+              </dl>
+            </div>
+          </div>
+          <div class="mt-5 p-4 bg-surface-container-low rounded-lg flex items-start gap-3 text-sm text-on-surface-variant shadow-sm">
+            <span class="material-symbols-outlined text-primary">rule</span>
+            <span><b class="text-on-surface">선정 기준</b>: Jetson에서 15 FPS 이상인 모델 중 val 정확도가 가장 높은 것을 고릅니다. 두 모델의 차이가 작으면(mAP50 0.01 이내) 더 작은 모델을 고릅니다. 사람과 보호구를 한 모델에서 함께 검출하므로 추론은 프레임당 1회만 합니다.</span>
+          </div>
+        </div>
+
+        <!-- 2. 파인튜닝 설계 -->
+        <div id="model-finetune" class="mt-16">
+          <span class="label text-on-surface-variant">02 · FINE-TUNING DESIGN</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">특징 추출부는 그대로, 출력층은 4클래스로</h3>
+          <p class="text-on-surface-variant mb-6">학습 데이터에 라벨이 없는 클래스는 결과 모델에서 사라지므로 person도 함께 학습합니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-5 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="material-symbols-outlined text-primary text-2xl">person</span>
+              <h4 class="font-mono font-bold mt-2 mb-1">person</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">착용 판정의 기준이 되는 박스입니다.</p>
+            </div>
+            <div class="p-5 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="material-symbols-outlined text-primary text-2xl">engineering</span>
+              <h4 class="font-mono font-bold mt-2 mb-1">helmet</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">사람 박스의 머리 영역에 있으면 착용으로 봅니다.</p>
+            </div>
+            <div class="p-5 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="material-symbols-outlined text-primary text-2xl">checkroom</span>
+              <h4 class="font-mono font-bold mt-2 mb-1">vest</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">사람 박스의 상체 영역에 있으면 착용으로 봅니다.</p>
+            </div>
+            <div class="p-5 bg-error-container text-on-error-container rounded-xl shadow-sm">
+              <span class="material-symbols-outlined text-2xl">face</span>
+              <h4 class="font-mono font-bold mt-2 mb-1">head</h4>
+              <p class="text-sm leading-relaxed">안전모 없는 머리입니다. 미착용의 직접 증거가 되어 '안전모를 못 찾음'과 구분되므로 오탐이 줄어듭니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. 학습 데이터 -->
+        <div id="model-data" class="mt-16">
+          <span class="label text-on-surface-variant">03 · TRAINING DATA</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">공개 데이터로 시작해 현장 데이터로 마무리합니다</h3>
+          <p class="text-on-surface-variant mb-6">train/val/test(70/15/15)는 학습 전에 현장·영상 단위로 나눕니다.</p>
+          <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr class="bg-surface-container label"><th class="p-3">데이터셋</th><th class="p-3 text-right">이미지 수</th><th class="p-3">용도</th></tr>
+                </thead>
+                <tbody class="divide-y divide-outline-variant/40 align-top">
+                  <tr><td class="p-3 font-semibold"><a class="text-primary underline underline-offset-2 hover:opacity-80" href="https://docs.ultralytics.com/datasets/detect/construction-ppe/" target="_blank" rel="noopener">Construction-PPE</a></td><td class="p-3 text-right font-display font-bold">1,416</td><td class="p-3 text-on-surface-variant">베이스라인 (person·helmet·vest·no_helmet 포함)</td></tr>
+                  <tr><td class="p-3 font-semibold"><a class="text-primary underline underline-offset-2 hover:opacity-80" href="https://universe.roboflow.com/joseph-nelson/hard-hat-workers" target="_blank" rel="noopener">Hard Hat Workers</a></td><td class="p-3 text-right font-display font-bold">7,035</td><td class="p-3 text-on-surface-variant">helmet·head 보강</td></tr>
+                  <tr><td class="p-3 font-semibold"><a class="text-primary underline underline-offset-2 hover:opacity-80" href="https://aihub.or.kr/aihubdata/data/view.do?currMenu=115&amp;topMenu=100&amp;aihubDataSe=data&amp;dataSetSn=163" target="_blank" rel="noopener">AIHub 공사현장 안전장비</a></td><td class="p-3 text-right font-display font-bold">약 203만</td><td class="p-3 text-on-surface-variant">보호구 클래스가 있는 이미지만 골라 보강용으로 사용</td></tr>
+                  <tr><td class="p-3 font-semibold">자체 현장 데이터</td><td class="p-3 text-right font-display font-bold">2,000 이상</td><td class="p-3 text-on-surface-variant">최종 학습·검증</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="mt-4 text-xs text-on-surface-variant">person 라벨이 없는 데이터는 COCO 모델로 자동 라벨링하고, test셋 라벨은 사람이 검수합니다.</p>
+          </div>
+        </div>
+
+        <!-- 4. 학습 절차 -->
+        <div id="model-train" class="mt-16">
+          <span class="label text-on-surface-variant">04 · TRAINING STEPS</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">학습 절차 4단계</h3>
+          <ol class="grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <li class="flex flex-col p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="font-display text-4xl font-extrabold text-tertiary-container/40">01</span>
+              <h4 class="font-display text-lg font-bold mt-2 mb-2">베이스라인</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">YOLO26n과 Construction-PPE로 학습부터 착용 판정까지 한 번 끝까지 돌려 봅니다.</p>
+            </li>
+            <li class="flex flex-col p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="font-display text-4xl font-extrabold text-tertiary-container/40">02</span>
+              <h4 class="font-display text-lg font-bold mt-2 mb-2">데이터 확장</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">Hard Hat Workers와 AIHub 데이터를 더해 val 성능이 오르는지 봅니다.</p>
+            </li>
+            <li class="flex flex-col p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="font-display text-4xl font-extrabold text-tertiary-container/40">03</span>
+              <h4 class="font-display text-lg font-bold mt-2 mb-2">크기 비교</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">n·s·m을 같은 설정으로 학습하고 Jetson에서 FPS를 잽니다.</p>
+              <div class="mt-auto pt-4 label text-primary">EPOCHS 100 // IMGSZ 640 // SEED 0</div>
+            </li>
+            <li class="flex flex-col p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="font-display text-4xl font-extrabold text-tertiary-container/40">04</span>
+              <h4 class="font-display text-lg font-bold mt-2 mb-2">현장 적응</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">고른 모델을 자체 현장 데이터로 한 번 더 파인튜닝합니다.</p>
+            </li>
+          </ol>
+
+          <details class="mt-5 group bg-inverse-surface text-inverse-on-surface rounded-xl overflow-hidden">
+            <summary class="cursor-pointer list-none p-5 flex items-center justify-between gap-3">
+              <span class="flex items-center gap-2 font-display font-bold"><span class="material-symbols-outlined text-tertiary-fixed">code</span>학습 코드 (Ultralytics)</span>
+              <span class="material-symbols-outlined transition-transform group-open:rotate-180">expand_more</span>
+            </summary>
+            <pre class="px-5 pb-5 overflow-x-auto text-[0.8rem] leading-relaxed font-mono"><code>from ultralytics import YOLO
+
+model = YOLO("yolo26s.pt")
+model.train(data="ppe.yaml", epochs=100, imgsz=640, seed=0)</code></pre>
+          </details>
+        </div>
+
+        <!-- 5. 전체 흐름 -->
+        <div id="model-flow" class="mt-16">
+          <span class="label text-on-surface-variant">05 · END-TO-END FLOW</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">검출 모델에서 착용 판정까지 8단계</h3>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <h4 class="font-display text-lg font-bold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">center_focus_strong</span>A. 검출 모델 <span class="text-sm font-normal text-on-surface-variant">(person·helmet·vest·head)</span></h4>
+              <ol class="space-y-4 text-sm">
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">1</span><div><p class="font-semibold">데이터·클래스 확정</p><p class="text-on-surface-variant mt-0.5">4클래스 정의, 데이터셋 통합, 라벨 기준 문서 작성</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">2</span><div><p class="font-semibold">데이터 분할</p><p class="text-on-surface-variant mt-0.5">현장·영상 단위로 train/val/test 분리</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">3</span><div><p class="font-semibold">n·s·m 비교 선정</p><p class="text-on-surface-variant mt-0.5">val mAP와 Jetson FP16 15 FPS 이상</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">4</span><div><p class="font-semibold">검출 검증표</p><p class="text-on-surface-variant mt-0.5">test셋 1회 평가, 클래스별 P·R·mAP</p></div></li>
+              </ol>
+            </div>
+            <div class="p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <h4 class="font-display text-lg font-bold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">rule</span>B. 착용 판정 <span class="text-sm font-normal text-on-surface-variant">(포함률 규칙 엔진)</span></h4>
+              <ol class="space-y-4 text-sm">
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">5</span><div><p class="font-semibold">판정 테스트셋</p><p class="text-on-surface-variant mt-0.5">사람 단위 착용 라벨, 미착용 30% 이상</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">6</span><div><p class="font-semibold">임계값 조정</p><p class="text-on-surface-variant mt-0.5">val셋으로 포함률 임계값 결정</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">7</span><div><p class="font-semibold">판정 검증표</p><p class="text-on-surface-variant mt-0.5">test셋 1회 평가, 미착용 Recall·Precision</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">8</span><div><p class="font-semibold">영상 이벤트 테스트</p><p class="text-on-surface-variant mt-0.5">Jetson에서 연속 5프레임 확정, 오탐 ≤ 3건/일</p></div></li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. 검증 -->
+        <div id="model-eval" class="mt-16">
+          <span class="label text-on-surface-variant">06 · EVALUATION</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">두 단계로 검증합니다</h3>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <span class="label text-tertiary-container">검증 1</span>
+              <h4 class="font-display text-lg font-bold mt-1 mb-2">검출 성능</h4>
+              <p class="text-sm text-on-surface-variant mb-4">선정한 모델을 test셋으로 한 번만 평가합니다 (<code class="font-mono text-xs px-1 py-0.5 rounded bg-surface-container-high">model.val(split="test")</code>).</p>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[440px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">클래스</th><th class="p-2.5">Precision</th><th class="p-2.5">Recall</th><th class="p-2.5">mAP50</th><th class="p-2.5">목표</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-mono font-semibold">person</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 font-semibold text-primary">Recall ≥ 0.97</td></tr>
+                    <tr><td class="p-2.5 font-mono font-semibold">helmet</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 font-semibold text-primary">mAP50 ≥ 0.93</td></tr>
+                    <tr><td class="p-2.5 font-mono font-semibold">vest</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 font-semibold text-primary">mAP50 ≥ 0.90</td></tr>
+                    <tr><td class="p-2.5 font-mono font-semibold">head</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-on-surface-variant">참고용</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="mt-4 text-xs text-on-surface-variant">수치는 평가 후 채웁니다. Jetson에서 TensorRT FP16으로 변환한 뒤 mAP 하락(0.01 이내)과 FPS(15 이상)도 확인합니다.</p>
+            </div>
+
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <span class="label text-tertiary-container">검증 2</span>
+              <h4 class="font-display text-lg font-bold mt-1 mb-2">착용 판정</h4>
+              <p class="text-sm text-on-surface-variant mb-4">보호구 박스가 사람 박스의 해당 영역에 들어간 비율(<b class="text-on-surface">포함률 = 겹친 면적 ÷ 보호구 박스 면적</b>)로 판단합니다. 안전모 박스는 사람 박스보다 훨씬 작아서 IoU는 쓰지 않습니다.</p>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[440px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">항목</th><th class="p-2.5">영역</th><th class="p-2.5">착용 조건</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-semibold text-primary">안전모</td><td class="p-2.5">사람 박스 상단 25%</td><td class="p-2.5">helmet 포함률 ≥ 0.6, head 없음</td></tr>
+                    <tr><td class="p-2.5 font-semibold text-primary">안전조끼</td><td class="p-2.5">사람 박스 높이 20~65% 구간</td><td class="p-2.5">vest 포함률 ≥ 0.5</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <ul class="mt-4 space-y-2 text-sm text-on-surface-variant">
+                <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>임계값은 val셋으로 정하고, test셋은 마지막에 한 번만 씁니다.</li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>판정 테스트셋은 사람 1명마다 착용/미착용 정답을 답니다. 사람 500명 이상, 그중 미착용 30% 이상으로 구성합니다.</li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>목표는 미착용 Recall ≥ 0.95, Precision ≥ 0.90입니다.</li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>마지막으로 Jetson에서 영상으로 테스트해, 오탐이 로봇 1대당 하루 3건 이하인지 확인합니다.</li>
               </ul>
             </div>
           </div>

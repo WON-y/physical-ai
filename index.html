@@ -82,6 +82,7 @@
         <a class="hover:text-on-surface transition-colors" href="#kpi">성능 목표</a>
         <a class="hover:text-on-surface transition-colors" href="#data">데이터 전처리</a>
         <a class="hover:text-on-surface transition-colors" href="#model">AI 모델</a>
+        <a class="hover:text-on-surface transition-colors" href="#vision">보조 모델</a>
         <a class="hover:text-on-surface transition-colors" href="#roi">도입 효과</a>
       </nav>
       <a href="#poc" class="inline-flex items-center gap-1 bg-primary-container text-on-primary hover:bg-primary text-sm px-4 py-2 rounded-lg transition-colors shadow-sm">
@@ -1362,6 +1363,240 @@ model.train(data="ppe.yaml", epochs=100, imgsz=640, seed=0)</code></pre>
                 <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>마지막으로 Jetson에서 영상으로 테스트해, 오탐이 로봇 1대당 하루 3건 이하인지 확인합니다.</li>
               </ul>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 비전 AI 모델 비교 · 보조 모델 적용 (report/AImodel.md) ===== -->
+    <section id="vision" class="py-20 lg:py-28 bg-surface-container">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-10">
+          <span class="label text-tertiary-container">VISION AI MODELS</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">모델마다 잘하는 일이 다릅니다,<br class="hidden sm:block"> 그래서 역할을 나눴습니다</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">YOLOE, DINO-X, SAM3, SigLIP2, OCR, MediaPipe 6개 비전 모델을 비교했습니다. 실시간 검출은 파인튜닝한 YOLO26이 맡고, <strong class="text-on-surface">DINO-X</strong>는 데이터 준비 단계의 자동 라벨링에, <strong class="text-on-surface">MediaPipe Pose</strong>는 로봇의 착용 판정 보강에 씁니다.</p>
+          <p class="mt-3 label text-on-surface-variant">비전 AI 모델 학습 보고서 · 2026-10-12</p>
+        </div>
+
+        <!-- 섹션 내 목차 -->
+        <nav class="flex flex-wrap gap-2 text-sm" aria-label="보조 모델 목차">
+          <a href="#vision-compare" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">6개 모델 비교</a>
+          <a href="#vision-dinox" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">DINO-X 자동 라벨링</a>
+          <a href="#vision-mediapipe" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">MediaPipe 판정 보강</a>
+          <a href="#vision-pipeline" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">최종 파이프라인</a>
+        </nav>
+
+        <!-- 1. 6개 모델 비교 -->
+        <div id="vision-compare" class="mt-16">
+          <span class="label text-on-surface-variant">01 · MODEL COMPARISON</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">6개 모델의 특징과 이 프로젝트에서의 쓰임</h3>
+          <p class="text-on-surface-variant mb-6">클래스가 4개로 고정된 실시간 검출에는 전용으로 파인튜닝한 YOLO26이 정확도·속도 모두 유리합니다. 나머지 모델은 강점이 맞는 곳에만 씁니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-xl font-bold">YOLOE</h4>
+                <span class="label px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">미채택</span>
+              </div>
+              <p class="mt-1 text-sm text-on-surface-variant">개방형 어휘 객체 검출·분할 · 텍스트/시각/프롬프트 없는 방식 · 실시간</p>
+              <p class="mt-3 text-sm"><span class="label text-on-surface-variant block">출력 · 대표 활용</span>박스, 마스크 · 실시간 CCTV 탐지</p>
+              <p class="mt-auto pt-4 text-sm text-on-surface-variant border-t border-outline-variant/40"><b class="text-on-surface">대체하지 않은 이유</b> — 학습하지 않은 객체를 찾는 게 강점인데, 이 프로젝트는 클래스가 4개로 고정되어 있습니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-primary text-on-primary rounded-xl shadow-md">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-xl font-bold">DINO-X</h4>
+                <span class="label px-2 py-0.5 rounded bg-tertiary-fixed text-tertiary">보조 · 라벨링</span>
+              </div>
+              <p class="mt-1 text-sm text-primary-fixed">IDEA Research의 고정밀 개방형 객체 인식 · 정확하지만 무겁고 클라우드 API로 호출</p>
+              <p class="mt-3 text-sm"><span class="label text-primary-fixed-dim block">출력 · 대표 활용</span>박스, 마스크, 키포인트 · 데이터 라벨링</p>
+              <p class="mt-auto pt-4 text-sm text-primary-fixed border-t border-primary-fixed/20"><b class="text-on-primary">쓰는 곳</b> — 로봇에는 탑재할 수 없어, 오프라인 학습 데이터 준비 단계에서 초벌 라벨을 만듭니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-xl font-bold">SAM3</h4>
+                <span class="label px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">미채택</span>
+              </div>
+              <p class="mt-1 text-sm text-on-surface-variant">Meta의 픽셀 단위 세그멘테이션 · 텍스트(개념) 프롬프트로 같은 개념 전체 분할 · 영상 추적</p>
+              <p class="mt-3 text-sm"><span class="label text-on-surface-variant block">출력 · 대표 활용</span>마스크 · 배경 제거, 의료 영상</p>
+              <p class="mt-auto pt-4 text-sm text-on-surface-variant border-t border-outline-variant/40"><b class="text-on-surface">대체하지 않은 이유</b> — 판정이 박스 기반이라 픽셀 분할이 필요 없고, 연산량이 큽니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-xl font-bold">SigLIP2</h4>
+                <span class="label px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">미채택</span>
+              </div>
+              <p class="mt-1 text-sm text-on-surface-variant">Google의 비전-언어 인코더 · 이미지와 텍스트를 같은 임베딩 공간으로 · 제로샷 분류</p>
+              <p class="mt-3 text-sm"><span class="label text-on-surface-variant block">출력 · 대표 활용</span>벡터(유사도) · 이미지 검색</p>
+              <p class="mt-auto pt-4 text-sm text-on-surface-variant border-t border-outline-variant/40"><b class="text-on-surface">대체하지 않은 이유</b> — 위치(박스)를 출력하지 않아 검출 모델로 쓸 수 없습니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-xl font-bold">OCR</h4>
+                <span class="label px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">미채택</span>
+              </div>
+              <p class="mt-1 text-sm text-on-surface-variant">이미지 속 글자를 읽는 기술 · 텍스트 검출 → 인식 2단계 · Tesseract, PaddleOCR 등</p>
+              <p class="mt-3 text-sm"><span class="label text-on-surface-variant block">출력 · 대표 활용</span>문자열 + 위치 · 영수증·신분증 인식</p>
+              <p class="mt-auto pt-4 text-sm text-on-surface-variant border-t border-outline-variant/40"><b class="text-on-surface">대체하지 않은 이유</b> — 보호구 착용 점검이라는 프로젝트 목적과 관련이 없습니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-primary text-on-primary rounded-xl shadow-md">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-xl font-bold">MediaPipe</h4>
+                <span class="label px-2 py-0.5 rounded bg-tertiary-fixed text-tertiary">보조 · 판정</span>
+              </div>
+              <p class="mt-1 text-sm text-primary-fixed">Google의 실시간 인체 랜드마크 추출 · Pose 33점, Hands 21점, Face Mesh 468점 · 경량</p>
+              <p class="mt-3 text-sm"><span class="label text-primary-fixed-dim block">출력 · 대표 활용</span>관절 좌표 · 운동 자세 분석</p>
+              <p class="mt-auto pt-4 text-sm text-primary-fixed border-t border-primary-fixed/20"><b class="text-on-primary">쓰는 곳</b> — 로봇에서 YOLO 검출 뒤 실행해, 실제 관절 위치로 머리·상체 영역을 잡습니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. DINO-X 자동 라벨링 -->
+        <div id="vision-dinox" class="mt-16">
+          <span class="label text-on-surface-variant">02 · AUTO LABELING WITH DINO-X</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">큰 모델로 라벨링하고, 작은 모델로 배포합니다</h3>
+          <p class="text-on-surface-variant mb-6">자체 현장 데이터(2,000장 이상)와 AIHub 데이터는 라벨이 없거나 우리 클래스 정의와 맞지 않습니다. 정확도가 높은 DINO-X로 초벌 라벨을 만들고, 사람은 검수만 합니다. <b class="text-on-surface">로봇에는 탑재하지 않는 오프라인 단계</b>입니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-12 gap-5">
+            <div class="lg:col-span-5 bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">클래스별 텍스트 프롬프트</h4>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[300px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">클래스</th><th class="p-2.5">프롬프트</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-mono font-semibold">person</td><td class="p-2.5">"person"</td></tr>
+                    <tr><td class="p-2.5 font-mono font-semibold">helmet</td><td class="p-2.5">"hard hat", "safety helmet"</td></tr>
+                    <tr><td class="p-2.5 font-mono font-semibold">vest</td><td class="p-2.5">"safety vest", "reflective vest"</td></tr>
+                    <tr><td class="p-2.5 font-mono font-semibold">head</td><td class="p-2.5">"head"</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="mt-4 text-xs text-on-surface-variant">신뢰도(confidence) 0.3 이상인 박스만 남깁니다.</p>
+            </div>
+            <div class="lg:col-span-7 bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">라벨링 절차</h4>
+              <ol class="space-y-4 text-sm">
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">1</span><div><p class="font-semibold">텍스트 프롬프트로 4개 클래스 검출</p><p class="text-on-surface-variant mt-0.5">클래스마다 동의어 프롬프트를 함께 넣습니다.</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">2</span><div><p class="font-semibold">신뢰도 0.3 이상만 유지</p><p class="text-on-surface-variant mt-0.5">임계값은 검증 결과를 보고 조정합니다.</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">3</span><div><p class="font-semibold">head 후처리</p><p class="text-on-surface-variant mt-0.5">head 박스가 helmet 박스와 많이 겹치면 안전모를 쓴 머리이므로 삭제합니다. (head = 안전모를 쓰지 않은 머리)</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">4</span><div><p class="font-semibold">YOLO 형식(txt)으로 변환</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">5</span><div><p class="font-semibold">사람이 검수·수정</p><p class="text-on-surface-variant mt-0.5">틀린 박스를 고칩니다. <b class="text-on-surface">test셋은 반드시 전수 검수</b>합니다.</p></div></li>
+              </ol>
+            </div>
+          </div>
+          <div class="mt-5 grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-2 gap-5">
+            <div class="p-5 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display font-bold mb-3 flex items-center gap-2"><span class="material-symbols-outlined text-primary">trending_up</span>기대 효과</h4>
+              <ul class="space-y-2 text-sm text-on-surface-variant">
+                <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>박스를 새로 그리는 대신 수정만 해서 라벨링 시간을 줄입니다.</li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>기존 계획(COCO 모델로 person만 자동 라벨링)보다 넓게, 보호구 클래스까지 자동화합니다.</li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-ok">check_circle</span>"큰 모델로 라벨링 → 작은 모델로 배포"하는 실무 방식을 적용합니다.</li>
+              </ul>
+            </div>
+            <div class="p-5 bg-surface rounded-xl shadow-sm">
+              <h4 class="font-display font-bold mb-3 flex items-center gap-2"><span class="material-symbols-outlined text-primary">fact_check</span>검증 방법</h4>
+              <p class="text-sm text-on-surface-variant leading-relaxed">사람이 직접 라벨링한 이미지 100장에서 DINO-X 라벨과 비교해 클래스별 Precision·Recall을 확인하고, 신뢰도 임계값을 조정합니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. MediaPipe 판정 보강 -->
+        <div id="vision-mediapipe" class="mt-16">
+          <span class="label text-on-surface-variant">03 · POSE-AWARE JUDGEMENT</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">고정 비율 대신, 사람의 자세에 맞춰 판정합니다</h3>
+          <p class="text-on-surface-variant mb-6">기존 규칙은 사람 박스를 고정 비율로 나눕니다(상단 25% = 머리, 높이 20~65% = 상체). 허리를 숙이거나, 앉아 있거나, 몸 일부가 가려지면 실제 위치와 어긋나 오판정이 생깁니다. MediaPipe Pose로 실제 관절 위치를 찾아 판정 영역을 잡습니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">판정 방법</h4>
+              <ol class="space-y-4 text-sm">
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">1</span><div><p class="font-semibold">person 박스로 이미지 자르기</p><p class="text-on-surface-variant mt-0.5">YOLO26이 검출한 사람을 잘라 MediaPipe Pose에 넣습니다.</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">2</span><div><p class="font-semibold">필요한 랜드마크만 사용</p><p class="text-on-surface-variant mt-0.5">33개 중 머리·상체를 정하는 점만 씁니다.</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">3</span><div><p class="font-semibold">포함률로 착용 판단</p><p class="text-on-surface-variant mt-0.5">이 영역 안에 helmet·vest 박스가 들어간 비율로 판단합니다.</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">4</span><div><p class="font-semibold">가려지면 기존 규칙으로 대체</p><p class="text-on-surface-variant mt-0.5">랜드마크 visibility가 낮으면 고정 비율 규칙을 씁니다.</p></div></li>
+              </ol>
+            </div>
+            <div class="flex flex-col gap-5">
+              <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+                <h4 class="font-display text-lg font-bold mb-4">사용 랜드마크</h4>
+                <div class="overflow-x-auto">
+                  <table class="w-full min-w-[400px] text-left text-sm">
+                    <thead><tr class="bg-surface-container label"><th class="p-2.5">영역</th><th class="p-2.5">랜드마크</th><th class="p-2.5">영역 설정</th></tr></thead>
+                    <tbody class="divide-y divide-outline-variant/40 align-top">
+                      <tr><td class="p-2.5 font-semibold text-primary">머리</td><td class="p-2.5">코(0), 양 귀(7, 8)</td><td class="p-2.5">귀 사이 너비를 기준으로 위쪽까지 확장한 박스</td></tr>
+                      <tr><td class="p-2.5 font-semibold text-primary">상체</td><td class="p-2.5">양 어깨(11, 12), 양 골반(23, 24)</td><td class="p-2.5">어깨~골반을 감싸는 박스</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="p-5 bg-surface rounded-xl shadow-sm flex items-start gap-3 text-sm text-on-surface-variant">
+                <span class="material-symbols-outlined text-primary">speed</span>
+                <span><b class="text-on-surface">속도 고려</b>: 사람 수만큼 추론이 늘어나므로, 고정 비율 규칙으로 판정이 애매한 경우(포함률이 임계값 근처)에만 MediaPipe를 실행합니다. Jetson에서 전체 15 FPS가 유지되는지 확인합니다.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-5 bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+            <h4 class="font-display text-lg font-bold mb-2">검증: 두 판정 방식 비교</h4>
+            <p class="text-sm text-on-surface-variant mb-4">같은 판정 테스트셋(사람 500명 이상, 미착용 30% 이상)으로 비교합니다.</p>
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[520px] text-left text-sm">
+                <thead><tr class="bg-surface-container label"><th class="p-2.5">판정 방식</th><th class="p-2.5">미착용 Recall</th><th class="p-2.5">미착용 Precision</th><th class="p-2.5">FPS</th></tr></thead>
+                <tbody class="divide-y divide-outline-variant/40">
+                  <tr><td class="p-2.5 font-semibold">고정 비율 규칙 (기존)</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td></tr>
+                  <tr><td class="p-2.5 font-semibold">MediaPipe Pose 보강</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-outline">—</td></tr>
+                  <tr class="bg-surface-container-low"><td class="p-2.5 font-semibold text-primary">목표</td><td class="p-2.5 font-semibold text-primary">≥ 0.95</td><td class="p-2.5 font-semibold text-primary">≥ 0.90</td><td class="p-2.5 font-semibold text-primary">≥ 15</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="mt-4 text-xs text-on-surface-variant">수치는 평가 후 채웁니다.</p>
+          </div>
+        </div>
+
+        <!-- 4. 최종 파이프라인 -->
+        <div id="vision-pipeline" class="mt-16">
+          <span class="label text-on-surface-variant">04 · FINAL PIPELINE</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">데이터 준비부터 이벤트 확정까지 5단계</h3>
+          <ol class="grid grid-cols-1 [&>*]:min-w-0 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <li class="flex flex-col p-5 bg-primary text-on-primary rounded-xl shadow-sm">
+              <span class="label text-tertiary-fixed">① 데이터 준비</span>
+              <h4 class="font-display text-lg font-bold mt-1">DINO-X</h4>
+              <p class="mt-2 text-sm text-primary-fixed leading-relaxed">보호구·사람 자동 라벨링 → 사람이 검수</p>
+              <span class="mt-auto pt-4 label text-primary-fixed-dim">PC / 클라우드</span>
+            </li>
+            <li class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <span class="label text-tertiary-container">② 모델 학습</span>
+              <h4 class="font-display text-lg font-bold mt-1">YOLO26 n·s·m</h4>
+              <p class="mt-2 text-sm text-on-surface-variant leading-relaxed">4클래스 파인튜닝, 크기 비교</p>
+              <span class="mt-auto pt-4 label text-on-surface-variant">PC (GPU)</span>
+            </li>
+            <li class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <span class="label text-tertiary-container">③ 실시간 검출</span>
+              <h4 class="font-display text-lg font-bold mt-1">YOLO26 TensorRT FP16</h4>
+              <p class="mt-2 text-sm text-on-surface-variant leading-relaxed">person·helmet·vest·head 검출</p>
+              <span class="mt-auto pt-4 label text-on-surface-variant">Jetson 로봇</span>
+            </li>
+            <li class="flex flex-col p-5 bg-primary text-on-primary rounded-xl shadow-sm">
+              <span class="label text-tertiary-fixed">④ 착용 판정</span>
+              <h4 class="font-display text-lg font-bold mt-1">MediaPipe Pose + 포함률</h4>
+              <p class="mt-2 text-sm text-primary-fixed leading-relaxed">자세에 맞춘 머리·상체 영역으로 착용 판단</p>
+              <span class="mt-auto pt-4 label text-primary-fixed-dim">Jetson 로봇</span>
+            </li>
+            <li class="flex flex-col p-5 bg-surface rounded-xl shadow-sm">
+              <span class="label text-tertiary-container">⑤ 이벤트 확정</span>
+              <h4 class="font-display text-lg font-bold mt-1">규칙</h4>
+              <p class="mt-2 text-sm text-on-surface-variant leading-relaxed">연속 5프레임 미착용 시 알림</p>
+              <span class="mt-auto pt-4 label text-on-surface-variant">Jetson 로봇</span>
+            </li>
+          </ol>
+
+          <div class="mt-10 p-6 lg:p-8 bg-primary text-on-primary rounded-xl grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <div class="lg:col-span-4">
+              <span class="label text-tertiary-fixed">TAKEAWAY</span>
+              <h4 class="font-display text-2xl font-bold mt-1">정리</h4>
+            </div>
+            <ul class="lg:col-span-8 space-y-3 text-primary-fixed">
+              <li class="flex gap-3"><span class="material-symbols-outlined text-tertiary-fixed">check</span><span>6개 모델 중 실시간 검출에는 파인튜닝한 YOLO가 가장 적합하다는 결론을 내렸습니다.</span></li>
+              <li class="flex gap-3"><span class="material-symbols-outlined text-tertiary-fixed">check</span><span>DINO-X는 정확하지만 무거운 특성을 살려, 로봇이 아닌 데이터 준비 단계에 씁니다.</span></li>
+              <li class="flex gap-3"><span class="material-symbols-outlined text-tertiary-fixed">check</span><span>MediaPipe의 관절 분석으로, 박스만으로는 놓치던 사람의 자세를 착용 판정에 반영합니다.</span></li>
+              <li class="flex gap-3"><span class="material-symbols-outlined text-tertiary-fixed">check</span><span>속도·정확도·실행 환경에 맞춰 역할을 나누는 것이 한 모델로 모든 일을 처리하는 것보다 효과적입니다.</span></li>
+            </ul>
           </div>
         </div>
       </div>

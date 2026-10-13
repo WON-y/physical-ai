@@ -85,11 +85,48 @@
         <a class="hover:text-on-surface transition-colors" href="#vision">보조 모델</a>
         <a class="hover:text-on-surface transition-colors" href="#roi">도입 효과</a>
       </nav>
-      <a href="#poc" class="inline-flex items-center gap-1 bg-primary-container text-on-primary hover:bg-primary text-sm px-4 py-2 rounded-lg transition-colors shadow-sm">
-        현장 실증 문의 <span class="material-symbols-outlined">arrow_forward</span>
-      </a>
+      <div class="flex items-center gap-2">
+        <!-- 챗봇 열기 버튼 -->
+        <button id="chat-toggle" type="button" aria-controls="chat-panel" aria-expanded="false" aria-label="문서 챗봇 열기"
+          class="w-10 h-10 rounded-lg border border-outline-variant text-primary hover:bg-surface-container-high flex items-center justify-center transition-colors">
+          <span class="material-symbols-outlined">smart_toy</span>
+        </button>
+        <a href="#poc" class="inline-flex items-center gap-1 bg-primary-container text-on-primary hover:bg-primary text-sm px-4 py-2 rounded-lg transition-colors shadow-sm">
+          현장 실증 문의 <span class="material-symbols-outlined">arrow_forward</span>
+        </a>
+      </div>
     </div>
   </header>
+
+  <!-- ===== 문서 챗봇 패널 ===== -->
+  <section id="chat-panel" hidden aria-label="문서 챗봇"
+    class="fixed z-[60] bottom-4 right-4 left-4 sm:left-auto sm:w-[400px] h-[min(600px,calc(100dvh-8rem))] bg-surface-container-lowest rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.18)] border border-outline-variant flex-col overflow-hidden">
+    <div class="bg-primary text-on-primary px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined">smart_toy</span>
+        <div>
+          <p class="font-display font-bold leading-tight">TERRAGUARD 문서 챗봇</p>
+          <p class="label !text-[0.6rem] text-primary-fixed-dim">PRD · 전처리 · YOLO · 비전 AI</p>
+        </div>
+      </div>
+      <button id="chat-close" type="button" aria-label="챗봇 닫기" class="w-8 h-8 rounded-lg hover:bg-primary-container flex items-center justify-center">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div id="chat-log" class="flex-1 overflow-y-auto p-4 space-y-3 text-sm" aria-live="polite">
+      <div class="bg-surface-container rounded-lg p-3 text-on-surface-variant">
+        이 페이지의 기획 문서에서 답을 찾아 드려요. 예: "안전모 미착용은 어떻게 판정하나요?", "YOLO 모델은 왜 YOLO26s인가요?"
+      </div>
+    </div>
+    <form id="chat-form" class="border-t border-outline-variant p-3 flex gap-2">
+      <label for="chat-input" class="sr-only">질문</label>
+      <input id="chat-input" type="text" maxlength="1000" autocomplete="off" placeholder="궁금한 내용을 입력하세요"
+        class="flex-1 min-w-0 bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary">
+      <button id="chat-send" type="submit" aria-label="보내기" class="bg-primary-container hover:bg-primary text-on-primary rounded-lg px-3 flex items-center justify-center disabled:opacity-50">
+        <span class="material-symbols-outlined">send</span>
+      </button>
+    </form>
+  </section>
 
   <main class="pt-[6.5rem] lg:pt-[7.5rem]">
 
@@ -1753,6 +1790,75 @@ model.train(data="ppe.yaml", epochs=100, imgsz=640, seed=0)</code></pre>
       </div>
     </div>
   </footer>
+
+  <!-- ===== 문서 챗봇: Supabase Edge Function(chat)이 문서 검색 + Gemini 답변 생성 ===== -->
+  <script>
+    (() => {
+      // 공개용 키(anon)만 사용. Gemini 키는 서버(Edge Function)에만 있습니다.
+      const CHAT_URL = "https://iuzsicxzfawtzverpmej.supabase.co/functions/v1/chat";
+      const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1enNpY3h6ZmF3dHp2ZXJwbWVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4Njk2OTIsImV4cCI6MjEwNzQ0NTY5Mn0.E1JK62VYmgtZk-AoaROs9zQCwCoCoUuTZMPtmOGiTPQ";
+
+      const panel = document.getElementById("chat-panel");
+      const toggle = document.getElementById("chat-toggle");
+      const log = document.getElementById("chat-log");
+      const form = document.getElementById("chat-form");
+      const input = document.getElementById("chat-input");
+      const send = document.getElementById("chat-send");
+
+      function setOpen(open) {
+        panel.hidden = !open;
+        panel.classList.toggle("flex", open);
+        toggle.setAttribute("aria-expanded", String(open));
+        if (open) input.focus();
+      }
+      toggle.addEventListener("click", () => setOpen(panel.hidden));
+      document.getElementById("chat-close").addEventListener("click", () => { setOpen(false); toggle.focus(); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) setOpen(false); });
+
+      const escape = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      const format = (s) => escape(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|\s)\*([^*\n]+)\*/g, "$1<em>$2</em>").replace(/\n/g, "<br>");
+
+      function bubble(html, mine) {
+        const el = document.createElement("div");
+        el.className = mine
+          ? "ml-8 bg-primary-container text-on-primary rounded-lg p-3"
+          : "mr-4 bg-surface-container rounded-lg p-3 leading-relaxed";
+        el.innerHTML = html;
+        log.appendChild(el);
+        log.scrollTop = log.scrollHeight;
+        return el;
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const question = input.value.trim();
+        if (!question) return;
+        input.value = "";
+        send.disabled = true;
+        bubble(escape(question), true);
+        const pending = bubble('<span class="text-on-surface-variant animate-pulse">문서를 찾아 답변을 만드는 중…</span>', false);
+        try {
+          const res = await fetch(CHAT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` },
+            body: JSON.stringify({ question }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || res.statusText);
+          const noAnswer = data.answer.startsWith("문서에 없는 내용");
+          const titles = noAnswer ? [] : [...new Set((data.sources || []).map((s) => s.title))];
+          pending.innerHTML = format(data.answer) +
+            (titles.length ? `<p class="mt-2 pt-2 border-t border-outline-variant label !text-[0.62rem] text-on-surface-variant">출처: ${titles.map(escape).join(" · ")}</p>` : "");
+        } catch (err) {
+          pending.innerHTML = `<span class="text-error">오류가 발생했습니다. 잠시 후 다시 시도해 주세요.</span>`;
+          console.error(err);
+        } finally {
+          send.disabled = false;
+          input.focus();
+        }
+      });
+    })();
+  </script>
 
 </body>
 </html>

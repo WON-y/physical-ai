@@ -83,6 +83,7 @@
         <a class="hover:text-on-surface transition-colors" href="#data">데이터 전처리</a>
         <a class="hover:text-on-surface transition-colors" href="#model">AI 모델</a>
         <a class="hover:text-on-surface transition-colors" href="#vision">보조 모델</a>
+        <a class="hover:text-on-surface transition-colors" href="#hardware">하드웨어</a>
         <a class="hover:text-on-surface transition-colors" href="#roi">도입 효과</a>
       </nav>
       <div class="flex items-center gap-2">
@@ -1634,6 +1635,438 @@ model.train(data="ppe.yaml", epochs=100, imgsz=640, seed=0)</code></pre>
               <li class="flex gap-3"><span class="material-symbols-outlined text-tertiary-fixed">check</span><span>MediaPipe의 관절 분석으로, 박스만으로는 놓치던 사람의 자세를 착용 판정에 반영합니다.</span></li>
               <li class="flex gap-3"><span class="material-symbols-outlined text-tertiary-fixed">check</span><span>속도·정확도·실행 환경에 맞춰 역할을 나누는 것이 한 모델로 모든 일을 처리하는 것보다 효과적입니다.</span></li>
             </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 하드웨어 부품 구성 (report/Hardware.md) ===== -->
+    <section id="hardware" class="py-20 lg:py-28 bg-surface">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-10">
+          <span class="label text-tertiary-container">HARDWARE COMPONENTS</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">Raspberry Pi 5 하나로<br class="hidden sm:block"> 보고, 판단하고, 움직입니다</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">카메라·LiDAR 입력을 <strong class="text-on-surface">Raspberry Pi 5 + AI HAT+</strong>가 처리하고, 모터 컨트롤러가 바퀴를 구동하며, 미착용 이벤트는 Wi-Fi로 관리자에게 전달합니다. 경광등·스피커처럼 핵심 기능에 꼭 필요하지 않은 부품은 제외했습니다.</p>
+          <p class="mt-3 label text-on-surface-variant">하드웨어 구성도 · Raspberry Pi 5 기준</p>
+        </div>
+
+        <!-- 섹션 내 목차 -->
+        <nav class="flex flex-wrap gap-2 text-sm" aria-label="하드웨어 목차">
+          <a href="#hw-overview" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">전체 관계도</a>
+          <a href="#hw-flow" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">동작 흐름</a>
+          <a href="#hw-comm" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">통신 방식</a>
+          <a href="#hw-parts" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">부품별 사양</a>
+          <a href="#hw-power" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">전원 분배</a>
+          <a href="#hw-budget" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">전력 예산</a>
+        </nav>
+
+        <!-- 1. 전체 관계도 -->
+        <div id="hw-overview" class="mt-16">
+          <span class="label text-on-surface-variant">01 · SYSTEM OVERVIEW</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">입력 → 처리 → 출력, 한눈에 보는 연결</h3>
+          <p class="text-on-surface-variant mb-6">각 화살표 위의 라벨이 부품 사이의 연결 방식입니다.</p>
+
+          <!-- 부품 간 관계도 (SVG) -->
+          <div class="mb-5 bg-surface-container-low rounded-xl p-5 lg:p-7">
+            <h4 class="font-display text-lg font-bold mb-4">부품 간 관계도</h4>
+            <div class="overflow-x-auto">
+              <svg viewBox="0 0 1100 610" class="w-full min-w-[900px] h-auto" role="img" aria-labelledby="hw-diagram-title hw-diagram-desc" font-family="Pretendard, 'Hanken Grotesk', sans-serif">
+                <title id="hw-diagram-title">하드웨어 부품 간 관계도</title>
+                <desc id="hw-diagram-desc">카메라는 MIPI CSI-2, 2D LiDAR는 USB로 Raspberry Pi 5에 연결되고, Pi 5는 PCIe로 AI HAT+와 통신합니다. Pi 5는 USB Packet Serial로 모터 컨트롤러에 속도 명령을 보내고 엔코더 값을 받으며, 모터 컨트롤러는 PWM 전력으로 모터 4개를 구동하고 엔코더 A/B 신호를 받습니다. E-Stop은 GPIO로 Pi에 상태를 알리고 릴레이를 통해 모터 전원을 하드와이어로 차단합니다. Pi 5는 Wi-Fi로 공유기에 연결되고, MQTT/TLS로 알림 서버에, 서버는 알림톡·SMS·웹 푸시로 관리자 스마트폰에 알립니다. 배터리 25.6V는 E-Stop 릴레이를 거쳐 모터 컨트롤러로, DC-DC 변환기(24V→5V)를 거쳐 Pi 5로 전원을 공급합니다.</desc>
+                <defs>
+                  <marker id="hw-arr-data" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#43271a"/></marker>
+                  <marker id="hw-arr-power" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#82746e"/></marker>
+                  <marker id="hw-arr-pcie" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ffdbc9"/></marker>
+                  <marker id="hw-arr-safe" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ba1a1a"/></marker>
+                </defs>
+
+                <!-- 그룹 배경 -->
+                <rect x="10" y="445" width="1080" height="160" rx="8" fill="#ebe8e2"/>
+                <g font-size="12" font-weight="600" fill="#50443f" letter-spacing="1.2">
+                  <text x="30" y="26">입력</text>
+                  <text x="320" y="26">처리 · 구동</text>
+                  <text x="830" y="26">출력</text>
+                  <text x="30" y="468">전원</text>
+                </g>
+
+                <!-- 연결선: 데이터 (실선) -->
+                <g fill="none" stroke="#43271a" stroke-width="1.75">
+                  <path d="M210 72 H318" marker-end="url(#hw-arr-data)"/>
+                  <path d="M210 182 H318" marker-end="url(#hw-arr-data)"/>
+                  <path d="M210 310 H250 V208 H318" marker-end="url(#hw-arr-data)"/>
+                  <path d="M400 220 V298" marker-end="url(#hw-arr-data)"/>
+                  <path d="M460 300 V222" marker-end="url(#hw-arr-data)"/>
+                  <path d="M510 326 H598" marker-end="url(#hw-arr-data)"/>
+                  <path d="M600 352 H512" marker-end="url(#hw-arr-data)"/>
+                  <path d="M700 72 H828" marker-end="url(#hw-arr-data)"/>
+                  <path d="M945 104 V168" marker-end="url(#hw-arr-data)"/>
+                  <path d="M945 234 V288" marker-end="url(#hw-arr-data)"/>
+                </g>
+
+                <!-- 연결선: 전원 (점선) -->
+                <g fill="none" stroke="#82746e" stroke-width="1.75" stroke-dasharray="6 4">
+                  <path d="M220 528 H318" marker-end="url(#hw-arr-power)"/>
+                  <path d="M125 544 V585 H845 V546" marker-end="url(#hw-arr-power)"/>
+                  <path d="M800 480 V250 H680 V222" marker-end="url(#hw-arr-power)"/>
+                </g>
+
+                <!-- 연결선: 안전 차단 (빨간 굵은 선) -->
+                <g fill="none" stroke="#ba1a1a" stroke-width="3">
+                  <path d="M210 340 H280 V496 H316" marker-end="url(#hw-arr-safe)"/>
+                  <path d="M415 480 V380" marker-end="url(#hw-arr-safe)"/>
+                </g>
+
+                <!-- 선 라벨 -->
+                <g font-size="12" fill="#43271a" paint-order="stroke" stroke="#f6f3ed" stroke-width="4" stroke-linejoin="round">
+                  <text x="264" y="64" text-anchor="middle">MIPI CSI-2</text>
+                  <text x="264" y="174" text-anchor="middle">USB (UART)</text>
+                  <text x="243" y="262" text-anchor="end">GPIO</text>
+                  <text x="392" y="258" text-anchor="end">USB (Packet Serial)</text>
+                  <text x="468" y="258">엔코더 값</text>
+                  <text x="555" y="318" text-anchor="middle">PWM 전력</text>
+                  <text x="555" y="370" text-anchor="middle">엔코더 A/B</text>
+                  <text x="764" y="64" text-anchor="middle">Wi-Fi 5</text>
+                  <text x="953" y="140">MQTT / TLS</text>
+                  <text x="953" y="265">알림톡 / SMS / 웹 푸시</text>
+                  <text x="808" y="370" fill="#50443f">5V</text>
+                  <text x="269" y="520" text-anchor="middle" fill="#50443f">24V</text>
+                  <text x="480" y="600" text-anchor="middle" fill="#50443f" stroke="#ebe8e2">24V</text>
+                  <text x="288" y="420" fill="#ba1a1a" font-weight="600">하드와이어</text>
+                  <text x="423" y="434" fill="#ba1a1a" font-weight="600">모터 전원 차단</text>
+                </g>
+
+                <!-- 노드: 입력 -->
+                <g font-size="14" font-weight="700" fill="#1c1c18">
+                  <rect x="30" y="40" width="180" height="64" rx="6" fill="#fcf9f3" stroke="#82746e"/>
+                  <text x="46" y="68">카메라 모듈 3</text>
+                  <text x="46" y="88" font-size="12" font-weight="400" fill="#50443f">영상 · 1080p 30 FPS</text>
+                  <rect x="30" y="150" width="180" height="64" rx="6" fill="#fcf9f3" stroke="#82746e"/>
+                  <text x="46" y="178">2D LiDAR</text>
+                  <text x="46" y="198" font-size="12" font-weight="400" fill="#50443f">360° 거리 측정</text>
+                  <rect x="30" y="290" width="180" height="64" rx="6" fill="#fcf9f3" stroke="#ba1a1a" stroke-width="2"/>
+                  <text x="46" y="318" fill="#ba1a1a">E-Stop</text>
+                  <text x="46" y="338" font-size="12" font-weight="400" fill="#50443f">비상정지 버튼</text>
+                </g>
+
+                <!-- 노드: 처리 -->
+                <rect x="320" y="40" width="380" height="180" rx="8" fill="#43271a"/>
+                <text x="338" y="72" font-size="16" font-weight="700" fill="#ffffff">Raspberry Pi 5</text>
+                <text x="338" y="94" font-size="12" fill="#eabda9">SBC · 8GB</text>
+                <g font-size="12" fill="#ffdbcc">
+                  <text x="338" y="140">ROS 2 주행 경로 계산</text>
+                  <text x="338" y="160">착용 판정</text>
+                  <text x="338" y="180">알림 전송</text>
+                </g>
+                <rect x="550" y="80" width="135" height="110" rx="6" fill="#5c3d2e" stroke="#ffdbc9"/>
+                <text x="566" y="112" font-size="14" font-weight="700" fill="#ffffff">AI HAT+</text>
+                <text x="566" y="134" font-size="12" fill="#ffdbcc">Hailo-8 26 TOPS</text>
+                <text x="566" y="154" font-size="12" fill="#ffdbcc">YOLO 추론 가속</text>
+
+                <path d="M488 135 H546" fill="none" stroke="#ffdbc9" stroke-width="1.75" marker-start="url(#hw-arr-pcie)" marker-end="url(#hw-arr-pcie)"/>
+                <text x="517" y="125" text-anchor="middle" font-size="11" fill="#ffdbc9">PCIe</text>
+
+                <!-- 노드: 구동 -->
+                <rect x="320" y="300" width="190" height="76" rx="6" fill="#5c3d2e"/>
+                <text x="336" y="330" font-size="14" font-weight="700" fill="#ffffff">모터 컨트롤러</text>
+                <text x="336" y="352" font-size="12" fill="#ffdbcc">RoboClaw 2×15A · PID</text>
+                <rect x="600" y="300" width="150" height="76" rx="6" fill="#5c3d2e"/>
+                <text x="616" y="330" font-size="14" font-weight="700" fill="#ffffff">DC 모터 ×4</text>
+                <text x="616" y="352" font-size="12" fill="#ffdbcc">기어드 · 엔코더 내장</text>
+
+                <!-- 노드: 출력 -->
+                <g font-size="14" font-weight="700" fill="#1c1c18">
+                  <rect x="830" y="40" width="230" height="64" rx="6" fill="#fcf9f3" stroke="#82746e"/>
+                  <text x="846" y="68">현장 Wi-Fi 공유기</text>
+                  <text x="846" y="88" font-size="12" font-weight="400" fill="#50443f">인터넷 연결</text>
+                  <rect x="830" y="170" width="230" height="64" rx="6" fill="#fcf9f3" stroke="#82746e"/>
+                  <text x="846" y="198">알림 서버</text>
+                  <text x="846" y="218" font-size="12" font-weight="400" fill="#50443f">이벤트 수신 · 알림 발송</text>
+                  <rect x="830" y="290" width="230" height="64" rx="6" fill="#fcf9f3" stroke="#82746e"/>
+                  <text x="846" y="318">관리자 스마트폰</text>
+                  <text x="846" y="338" font-size="12" font-weight="400" fill="#50443f">미착용 알림 · 대시보드</text>
+                </g>
+
+                <!-- 노드: 전원 -->
+                <g font-size="14" font-weight="700" fill="#4f2100">
+                  <rect x="30" y="480" width="190" height="64" rx="6" fill="#ffdbc9" stroke="#713200"/>
+                  <text x="46" y="508">배터리</text>
+                  <text x="46" y="528" font-size="12" font-weight="400">LiFePO4 25.6V 30Ah</text>
+                  <rect x="320" y="480" width="190" height="64" rx="6" fill="#ffdbc9" stroke="#ba1a1a" stroke-width="2"/>
+                  <text x="336" y="508">E-Stop 릴레이</text>
+                  <text x="336" y="528" font-size="12" font-weight="400">NC 접점 · 모터 전원</text>
+                  <rect x="760" y="480" width="170" height="64" rx="6" fill="#ffdbc9" stroke="#713200"/>
+                  <text x="776" y="508">DC-DC 변환기</text>
+                  <text x="776" y="528" font-size="12" font-weight="400">24V → 5V, 6A</text>
+                </g>
+              </svg>
+            </div>
+            <!-- 범례 -->
+            <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-on-surface-variant">
+              <span class="flex items-center gap-2"><svg width="36" height="10" aria-hidden="true"><line x1="0" y1="5" x2="36" y2="5" stroke="#43271a" stroke-width="2"/></svg>데이터 신호</span>
+              <span class="flex items-center gap-2"><svg width="36" height="10" aria-hidden="true"><line x1="0" y1="5" x2="36" y2="5" stroke="#82746e" stroke-width="2" stroke-dasharray="6 4"/></svg>전원</span>
+              <span class="flex items-center gap-2"><svg width="36" height="10" aria-hidden="true"><line x1="0" y1="5" x2="36" y2="5" stroke="#ba1a1a" stroke-width="3"/></svg>안전 차단 (하드와이어)</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-12 gap-4 items-stretch">
+            <!-- 입력 -->
+            <div class="lg:col-span-3 flex flex-col gap-3 p-5 bg-surface-container-low rounded-xl">
+              <span class="label text-tertiary-container">입력</span>
+              <div class="p-4 bg-surface rounded-lg shadow-sm">
+                <p class="font-display font-bold flex items-center gap-2"><span class="material-symbols-outlined text-primary">photo_camera</span>카메라 모듈 3</p>
+                <p class="text-sm text-on-surface-variant mt-1">영상 입력 · 1080p 30 FPS</p>
+                <p class="mt-2 label text-primary">→ MIPI CSI-2</p>
+              </div>
+              <div class="p-4 bg-surface rounded-lg shadow-sm">
+                <p class="font-display font-bold flex items-center gap-2"><span class="material-symbols-outlined text-primary">radar</span>2D LiDAR</p>
+                <p class="text-sm text-on-surface-variant mt-1">주변 360° 거리 측정</p>
+                <p class="mt-2 label text-primary">→ USB</p>
+              </div>
+              <div class="p-4 bg-surface rounded-lg shadow-sm border-l-4 border-error">
+                <p class="font-display font-bold flex items-center gap-2"><span class="material-symbols-outlined text-error">emergency_home</span>E-Stop</p>
+                <p class="text-sm text-on-surface-variant mt-1">비상정지 버튼</p>
+                <p class="mt-2 label text-primary">→ GPIO (상태 감지)</p>
+              </div>
+            </div>
+
+            <!-- 처리 -->
+            <div class="lg:col-span-5 flex flex-col gap-3 p-5 bg-primary text-on-primary rounded-xl shadow-md">
+              <span class="label text-tertiary-fixed">처리</span>
+              <div class="p-5 bg-primary-container rounded-lg">
+                <p class="font-display text-xl font-bold flex items-center gap-2"><span class="material-symbols-outlined text-tertiary-fixed">memory</span>Raspberry Pi 5</p>
+                <p class="text-sm text-primary-fixed mt-1">+ AI HAT+ (PCIe 연결, Hailo-8 26 TOPS)</p>
+                <ul class="mt-3 space-y-1 text-sm text-primary-fixed">
+                  <li class="flex gap-2"><span class="material-symbols-outlined text-tertiary-fixed">check</span>영상 수신 · 주행 경로 계산(ROS 2)</li>
+                  <li class="flex gap-2"><span class="material-symbols-outlined text-tertiary-fixed">check</span>착용 판정 · 알림 전송</li>
+                </ul>
+              </div>
+              <div class="flex items-center justify-center gap-2 label text-primary-fixed-dim">
+                <span class="material-symbols-outlined">arrow_downward</span>USB (Packet Serial)
+                <span class="material-symbols-outlined">arrow_upward</span>엔코더 값
+              </div>
+              <div class="p-4 bg-primary-container rounded-lg">
+                <p class="font-display font-bold flex items-center gap-2"><span class="material-symbols-outlined text-tertiary-fixed">settings_input_component</span>모터 컨트롤러 (RoboClaw)</p>
+                <p class="text-sm text-primary-fixed mt-1">PWM 전력 ↓ · ↑ 엔코더 신호 (A/B)</p>
+              </div>
+              <div class="p-4 bg-primary-container rounded-lg">
+                <p class="font-display font-bold flex items-center gap-2"><span class="material-symbols-outlined text-tertiary-fixed">settings</span>DC 기어드 모터 ×4</p>
+                <p class="text-sm text-primary-fixed mt-1">엔코더 내장 · 4륜 스키드 스티어</p>
+              </div>
+              <p class="mt-auto text-xs text-primary-fixed flex gap-2"><span class="material-symbols-outlined text-on-tertiary-container">bolt</span>E-Stop은 모터 컨트롤러 전원을 하드와이어로 직접 차단합니다.</p>
+            </div>
+
+            <!-- 출력 -->
+            <div class="lg:col-span-4 flex flex-col gap-3 p-5 bg-surface-container-low rounded-xl">
+              <span class="label text-tertiary-container">출력</span>
+              <div class="p-4 bg-surface rounded-lg shadow-sm">
+                <p class="font-display font-bold flex items-center gap-2"><span class="material-symbols-outlined text-primary">wifi</span>현장 Wi-Fi 공유기</p>
+                <p class="mt-2 label text-primary">← Wi-Fi</p>
+              </div>
+              <div class="flex justify-center label text-on-surface-variant"><span class="material-symbols-outlined">arrow_downward</span>인터넷 (MQTT / TLS)</div>
+              <div class="p-4 bg-surface rounded-lg shadow-sm">
+                <p class="font-display font-bold flex items-center gap-2"><span class="material-symbols-outlined text-primary">dns</span>알림 서버</p>
+              </div>
+              <div class="flex justify-center label text-on-surface-variant"><span class="material-symbols-outlined">arrow_downward</span>카카오 알림톡 / SMS / 웹 푸시</div>
+              <div class="p-4 bg-surface rounded-lg shadow-sm">
+                <p class="font-display font-bold flex items-center gap-2"><span class="material-symbols-outlined text-primary">smartphone</span>관리자 스마트폰</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 역할 분담 -->
+          <div class="mt-5 grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-3 gap-5">
+            <div class="p-5 bg-surface-container-low rounded-xl">
+              <span class="label text-on-surface-variant">ROLE · SBC</span>
+              <h4 class="font-display text-lg font-bold mt-1">Raspberry Pi 5</h4>
+              <p class="mt-2 text-sm text-on-surface-variant leading-relaxed">영상 수신, 주행 경로 계산(ROS 2), 착용 판정, 알림 전송</p>
+            </div>
+            <div class="p-5 bg-surface-container-low rounded-xl">
+              <span class="label text-on-surface-variant">ROLE · AI ACCELERATOR</span>
+              <h4 class="font-display text-lg font-bold mt-1">AI HAT+</h4>
+              <p class="mt-2 text-sm text-on-surface-variant leading-relaxed">YOLO 추론 가속. Pi의 CPU만으로는 15 FPS를 낼 수 없습니다.</p>
+            </div>
+            <div class="p-5 bg-surface-container-low rounded-xl">
+              <span class="label text-on-surface-variant">ROLE · MOTOR CONTROL</span>
+              <h4 class="font-display text-lg font-bold mt-1">모터 컨트롤러</h4>
+              <p class="mt-2 text-sm text-on-surface-variant leading-relaxed">Pi가 보낸 속도 명령대로 모터를 돌리고, 엔코더로 실제 속도를 맞춥니다(PID 제어).</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 기능별 동작 흐름 -->
+        <div id="hw-flow" class="mt-16">
+          <span class="label text-on-surface-variant">02 · OPERATION FLOW</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">기능별 동작 흐름</h3>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-3 gap-5">
+            <div class="bg-surface-container-low rounded-xl p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-1 flex items-center gap-2"><span class="material-symbols-outlined text-primary">videocam</span>카메라 → SBC</h4>
+              <p class="label text-on-surface-variant mb-4">영상 입력</p>
+              <ol class="space-y-3 text-sm">
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">1</span><span>카메라 모듈이 영상을 촬영합니다 (1080p, 30 FPS).</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">2</span><span><b>MIPI CSI-2</b> 리본 케이블로 Pi 5에 영상을 전송합니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">3</span><span>Pi 5가 프레임을 640×640으로 줄여 <b>PCIe</b>로 AI HAT+에 넘깁니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">4</span><span>AI HAT+가 YOLO 추론으로 person·helmet·vest·head를 검출해 Pi에 돌려줍니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary-container text-on-primary font-display font-bold text-xs flex items-center justify-center">5</span><span>Pi가 착용 여부를 판정하고, <b>연속 5프레임 미착용</b>이면 이벤트로 확정합니다.</span></li>
+              </ol>
+            </div>
+            <div class="bg-surface-container-low rounded-xl p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-1 flex items-center gap-2"><span class="material-symbols-outlined text-primary">notifications_active</span>SBC → 관리자</h4>
+              <p class="label text-on-surface-variant mb-4">알림 전송</p>
+              <ol class="space-y-3 text-sm">
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">1</span><span>Pi 5가 이벤트(유형, 시각, 위치, 얼굴을 블러 처리한 증빙 사진)를 만듭니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">2</span><span>내장 <b>Wi-Fi</b>로 현장 공유기에 접속해 <b>MQTT(TLS 암호화)</b>로 서버에 전송합니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">3</span><span>서버가 <b>카카오 알림톡·SMS·웹 푸시</b>로 관리자에게 알립니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary-container text-on-primary font-display font-bold text-xs flex items-center justify-center">4</span><span>Wi-Fi가 끊기면 microSD에 저장해 두었다가 연결이 복구되면 다시 보냅니다.</span></li>
+              </ol>
+            </div>
+            <div class="bg-surface-container-low rounded-xl p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-1 flex items-center gap-2"><span class="material-symbols-outlined text-primary">route</span>로봇 이동</h4>
+              <p class="label text-on-surface-variant mb-4">주행 · 비상정지</p>
+              <ol class="space-y-3 text-sm">
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">1</span><span>2D LiDAR가 주변 360° 거리를 측정해 <b>USB</b>로 Pi에 보냅니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">2</span><span>Pi가 ROS 2(SLAM, Nav2)로 현재 위치를 계산하고 다음 웨이포인트까지 경로를 만듭니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">3</span><span>좌·우 바퀴 속도 명령을 <b>USB(Packet Serial)</b>로 모터 컨트롤러에 보냅니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">4</span><span>모터 컨트롤러가 PWM 전력을 공급하고, <b>엔코더 신호</b>로 실제 속도를 확인해 보정합니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-primary text-on-primary font-display font-bold text-xs flex items-center justify-center">5</span><span>엔코더 값을 Pi에 돌려주고, Pi는 이를 주행 거리 계산에 씁니다.</span></li>
+                <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-error text-on-error font-display font-bold text-xs flex items-center justify-center">6</span><span>E-Stop을 누르면 <b>모터 전원이 하드웨어로 즉시 차단</b>되고, Pi는 GPIO로 이를 감지해 기록합니다.</span></li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. 부품 간 통신 방식 -->
+        <div id="hw-comm" class="mt-16">
+          <span class="label text-on-surface-variant">03 · INTERFACES</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">부품 간 통신 방식</h3>
+          <div class="bg-surface-container-low rounded-xl p-5 lg:p-7">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[760px] text-left text-sm">
+                <thead><tr class="bg-surface-container label"><th class="p-2.5">연결</th><th class="p-2.5">물리 연결</th><th class="p-2.5">통신 방식</th><th class="p-2.5">주고받는 데이터</th><th class="p-2.5">방향</th></tr></thead>
+                <tbody class="divide-y divide-outline-variant/40 align-top">
+                  <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">카메라 → Pi 5</td><td class="p-2.5">리본 케이블 (22핀)</td><td class="p-2.5 font-mono text-xs">MIPI CSI-2</td><td class="p-2.5">원본 영상 프레임</td><td class="p-2.5 text-on-surface-variant">단방향</td></tr>
+                  <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">Pi 5 ↔ AI HAT+</td><td class="p-2.5">FFC 케이블</td><td class="p-2.5 font-mono text-xs">PCIe Gen 3 ×1</td><td class="p-2.5">입력 이미지 / 검출 결과(박스·클래스·신뢰도)</td><td class="p-2.5 font-semibold">양방향</td></tr>
+                  <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">LiDAR → Pi 5</td><td class="p-2.5">USB 케이블 (USB-UART 변환 내장)</td><td class="p-2.5 font-mono text-xs">UART 시리얼</td><td class="p-2.5">360° 거리 데이터</td><td class="p-2.5 text-on-surface-variant">단방향</td></tr>
+                  <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">Pi 5 ↔ 모터 컨트롤러</td><td class="p-2.5">USB 케이블</td><td class="p-2.5 font-mono text-xs">Packet Serial (가상 시리얼 포트)</td><td class="p-2.5">속도 명령 / 엔코더 값·전류·배터리 전압</td><td class="p-2.5 font-semibold">양방향</td></tr>
+                  <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">모터 컨트롤러 → 모터</td><td class="p-2.5">전원선</td><td class="p-2.5 font-mono text-xs">PWM 전력 출력</td><td class="p-2.5">모터 구동 전력</td><td class="p-2.5 text-on-surface-variant">단방향</td></tr>
+                  <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">엔코더 → 모터 컨트롤러</td><td class="p-2.5">신호선</td><td class="p-2.5 font-mono text-xs">직교 엔코더 (A/B 펄스)</td><td class="p-2.5">바퀴 회전량·방향</td><td class="p-2.5 text-on-surface-variant">단방향</td></tr>
+                  <tr><td class="p-2.5 font-semibold text-error whitespace-nowrap">E-Stop → 모터 전원</td><td class="p-2.5">전원선</td><td class="p-2.5 font-mono text-xs">하드와이어 (릴레이 접점 차단)</td><td class="p-2.5">모터 전원 ON/OFF</td><td class="p-2.5 text-on-surface-variant">단방향</td></tr>
+                  <tr><td class="p-2.5 font-semibold text-error whitespace-nowrap">E-Stop → Pi 5</td><td class="p-2.5">신호선</td><td class="p-2.5 font-mono text-xs">GPIO 디지털 입력 (3.3V, 풀업)</td><td class="p-2.5">비상정지 상태</td><td class="p-2.5 text-on-surface-variant">단방향</td></tr>
+                  <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">Pi 5 → 공유기</td><td class="p-2.5">무선</td><td class="p-2.5 font-mono text-xs">Wi-Fi 5 (802.11ac) + MQTT over TLS</td><td class="p-2.5">이벤트 정보, 증빙 사진, 로봇 상태</td><td class="p-2.5 font-semibold">양방향</td></tr>
+                  <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">서버 → 관리자</td><td class="p-2.5">인터넷</td><td class="p-2.5 font-mono text-xs">카카오 알림톡 / SMS / 웹 푸시</td><td class="p-2.5">미착용 알림, 대시보드 링크</td><td class="p-2.5 text-on-surface-variant">단방향</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. 부품별 사양 -->
+        <div id="hw-parts" class="mt-16">
+          <span class="label text-on-surface-variant">04 · BILL OF MATERIALS</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">부품별 사양</h3>
+          <p class="text-on-surface-variant mb-6">예시 모델과 수치는 대표 부품 기준입니다. <b class="text-on-surface">(가정)</b> 표시는 실제 부품을 정한 뒤 데이터시트로 다시 확인합니다.</p>
+          <div class="bg-surface-container-low rounded-xl p-5 lg:p-7">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[860px] text-left text-sm">
+                <thead><tr class="bg-surface-container label"><th class="p-2.5">구분</th><th class="p-2.5">부품</th><th class="p-2.5">예시 모델</th><th class="p-2.5">전압</th><th class="p-2.5">소비전력 / 전류</th><th class="p-2.5">통신 방식</th></tr></thead>
+                <tbody class="divide-y divide-outline-variant/40 align-top">
+                  <tr><td class="p-2.5"><span class="label px-2 py-0.5 rounded bg-primary text-on-primary">처리</span></td><td class="p-2.5 font-semibold">SBC</td><td class="p-2.5">Raspberry Pi 5 (8GB)</td><td class="p-2.5">5V</td><td class="p-2.5">최대 5A (일반 동작 약 5~12W)</td><td class="p-2.5 text-on-surface-variant">CSI-2 ×2, PCIe ×1, USB 3.0 ×2, USB 2.0 ×2, Wi-Fi 5, GPIO(UART·I2C·SPI)</td></tr>
+                  <tr><td class="p-2.5"><span class="label px-2 py-0.5 rounded bg-primary text-on-primary">처리</span></td><td class="p-2.5 font-semibold">AI 가속기</td><td class="p-2.5">Raspberry Pi AI HAT+ 26 TOPS (Hailo-8)</td><td class="p-2.5">Pi에서 공급</td><td class="p-2.5">약 2.5W</td><td class="p-2.5 text-on-surface-variant">PCIe Gen 3</td></tr>
+                  <tr><td class="p-2.5"><span class="label px-2 py-0.5 rounded bg-surface-container-high text-on-surface">입력</span></td><td class="p-2.5 font-semibold">카메라</td><td class="p-2.5">Raspberry Pi Camera Module 3 (Sony IMX708, HDR 지원)</td><td class="p-2.5">3.3V (Pi에서 공급)</td><td class="p-2.5">약 1W 이하</td><td class="p-2.5 text-on-surface-variant">MIPI CSI-2</td></tr>
+                  <tr><td class="p-2.5"><span class="label px-2 py-0.5 rounded bg-surface-container-high text-on-surface">입력</span></td><td class="p-2.5 font-semibold">2D LiDAR</td><td class="p-2.5">Slamtec RPLIDAR A2M12 <span class="text-outline">(가정)</span></td><td class="p-2.5">5V (Pi USB에서 공급)</td><td class="p-2.5">약 0.3~0.5A</td><td class="p-2.5 text-on-surface-variant">USB (UART 변환)</td></tr>
+                  <tr><td class="p-2.5"><span class="label px-2 py-0.5 rounded bg-tertiary-fixed text-tertiary">구동</span></td><td class="p-2.5 font-semibold">모터 컨트롤러</td><td class="p-2.5">Basicmicro RoboClaw 2×15A</td><td class="p-2.5">6~34V (24V 사용)</td><td class="p-2.5">채널당 연속 15A</td><td class="p-2.5 text-on-surface-variant">USB / UART (Packet Serial), 엔코더 입력 2채널</td></tr>
+                  <tr><td class="p-2.5"><span class="label px-2 py-0.5 rounded bg-tertiary-fixed text-tertiary">구동</span></td><td class="p-2.5 font-semibold">모터 ×4</td><td class="p-2.5">24V DC 기어드 모터, 홀 엔코더 내장 <span class="text-outline">(가정)</span></td><td class="p-2.5">24V</td><td class="p-2.5">개당 정격 약 2~4A</td><td class="p-2.5 text-on-surface-variant">엔코더 A/B 출력 (5V)</td></tr>
+                  <tr><td class="p-2.5"><span class="label px-2 py-0.5 rounded bg-error-container text-on-error-container">안전</span></td><td class="p-2.5 font-semibold">비상정지 스위치</td><td class="p-2.5">버섯형 E-Stop (NC 접점 2개) + 릴레이</td><td class="p-2.5">24V 회로</td><td class="p-2.5 text-outline">—</td><td class="p-2.5 text-on-surface-variant">접점 1: 모터 전원 차단 / 접점 2: Pi GPIO</td></tr>
+                  <tr><td class="p-2.5"><span class="label px-2 py-0.5 rounded bg-surface-container-highest text-on-surface">전원</span></td><td class="p-2.5 font-semibold">배터리</td><td class="p-2.5">LiFePO4 25.6V 30Ah (약 770Wh) <span class="text-outline">(가정)</span></td><td class="p-2.5">공칭 25.6V</td><td class="p-2.5">연속 방전 30A 이상 BMS</td><td class="p-2.5 text-outline">—</td></tr>
+                  <tr><td class="p-2.5"><span class="label px-2 py-0.5 rounded bg-surface-container-highest text-on-surface">전원</span></td><td class="p-2.5 font-semibold">DC-DC 변환기</td><td class="p-2.5">24V → 5V, 6A (30W) 강압 변환기</td><td class="p-2.5">입력 24V / 출력 5.1V</td><td class="p-2.5">최대 6A</td><td class="p-2.5 text-outline">—</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="mt-5 p-5 bg-surface-container-low rounded-xl flex items-start gap-3 text-sm text-on-surface-variant">
+            <span class="material-symbols-outlined text-primary">swap_horiz</span>
+            <span><b class="text-on-surface">4륜 스키드 스티어 방식</b>: 왼쪽 모터 2개를 컨트롤러 채널 1, 오른쪽 모터 2개를 채널 2에 연결합니다.</span>
+          </div>
+        </div>
+
+        <!-- 5. 전원 분배 -->
+        <div id="hw-power" class="mt-16">
+          <span class="label text-on-surface-variant">05 · POWER DISTRIBUTION</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">배터리 하나에서 세 갈래 전원으로</h3>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-inverse-surface text-inverse-on-surface rounded-xl p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">전원 트리</h4>
+              <pre class="overflow-x-auto text-sm leading-relaxed font-mono"><code>배터리 (25.6V)
+ ├── E-Stop 릴레이 ── 모터 컨트롤러 ── 모터 ×4
+ └── DC-DC (24V → 5V) ── Raspberry Pi 5
+                           ├── AI HAT+   (PCIe·GPIO 헤더)
+                           ├── 카메라     (CSI 커넥터 3.3V)
+                           └── 2D LiDAR  (USB 5V)</code></pre>
+            </div>
+            <div class="bg-surface-container-low rounded-xl p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">전원 레일</h4>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[360px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">전원 레일</th><th class="p-2.5">연결 부품</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40 align-top">
+                    <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">24V (배터리 직결)</td><td class="p-2.5">모터 컨트롤러·모터 (E-Stop 경유), DC-DC 변환기 입력</td></tr>
+                    <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">5V</td><td class="p-2.5">Raspberry Pi 5 → AI HAT+, LiDAR</td></tr>
+                    <tr><td class="p-2.5 font-semibold text-primary whitespace-nowrap">3.3V (Pi 내부)</td><td class="p-2.5">카메라, E-Stop 감지 GPIO</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. 전력 예산 -->
+        <div id="hw-budget" class="mt-16">
+          <span class="label text-on-surface-variant">06 · POWER BUDGET</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">약 118W로 4시간 순찰, 배터리는 약 60% 여유</h3>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-12 gap-5">
+            <div class="lg:col-span-7 bg-surface-container-low rounded-xl p-5 lg:p-7">
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[380px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">구분</th><th class="p-2.5 text-right">평균 소비전력</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5">Raspberry Pi 5 (추론·ROS 2 동작)</td><td class="p-2.5 text-right font-mono">10W</td></tr>
+                    <tr><td class="p-2.5">AI HAT+</td><td class="p-2.5 text-right font-mono">2.5W</td></tr>
+                    <tr><td class="p-2.5">카메라</td><td class="p-2.5 text-right font-mono">1W</td></tr>
+                    <tr><td class="p-2.5">2D LiDAR</td><td class="p-2.5 text-right font-mono">2.5W</td></tr>
+                    <tr><td class="p-2.5">DC-DC 변환 손실 (약 10%)</td><td class="p-2.5 text-right font-mono">2W</td></tr>
+                    <tr class="bg-surface-container"><td class="p-2.5 font-semibold">전장부 소계</td><td class="p-2.5 text-right font-mono font-semibold">약 18W</td></tr>
+                    <tr><td class="p-2.5">모터 ×4 (순찰·정지 반복, 평균) <span class="text-outline">(가정)</span></td><td class="p-2.5 text-right font-mono">100W</td></tr>
+                    <tr class="bg-primary text-on-primary"><td class="p-2.5 font-bold">합계</td><td class="p-2.5 text-right font-mono font-bold">약 118W <span class="font-normal text-primary-fixed">(25.6V 기준 약 4.6A)</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="lg:col-span-5 flex flex-col gap-5">
+              <div class="p-6 bg-primary text-on-primary rounded-xl shadow-md">
+                <span class="label text-tertiary-fixed">BATTERY CHECK</span>
+                <div class="mt-3 grid grid-cols-2 gap-4">
+                  <div>
+                    <p class="label text-primary-fixed-dim">4시간 필요 에너지</p>
+                    <p class="font-display text-3xl font-bold mt-1">≈ 470<span class="text-lg">Wh</span></p>
+                    <p class="text-xs text-primary-fixed mt-1">118W × 4h</p>
+                  </div>
+                  <div>
+                    <p class="label text-primary-fixed-dim">배터리 용량</p>
+                    <p class="font-display text-3xl font-bold mt-1">≈ 770<span class="text-lg">Wh</span></p>
+                    <p class="text-xs text-primary-fixed mt-1">25.6V × 30Ah</p>
+                  </div>
+                </div>
+                <div class="mt-5">
+                  <div class="h-3 w-full rounded-full bg-primary-container overflow-hidden" role="img" aria-label="배터리 용량 770Wh 중 4시간 운용에 470Wh 사용">
+                    <div class="h-full bg-tertiary-fixed rounded-full" style="width: 61%"></div>
+                  </div>
+                  <p class="mt-2 text-xs text-primary-fixed">4시간 운용에 용량의 약 61% 사용 · 이론상 약 6.5시간 운용</p>
+                </div>
+              </div>
+              <div class="p-5 bg-surface-container-low rounded-xl flex items-start gap-3 text-sm text-on-surface-variant">
+                <span class="material-symbols-outlined text-primary">battery_charging_full</span>
+                <span><b class="text-on-surface">여유를 둔 이유</b>: 경사로 주행, 저온 환경, 배터리 노화로 실제 사용 가능 용량이 줄어드는 것을 고려해 약 60% 여유를 두었습니다.</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

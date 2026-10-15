@@ -84,6 +84,7 @@
         <a class="hover:text-on-surface transition-colors" href="#model">AI 모델</a>
         <a class="hover:text-on-surface transition-colors" href="#vision">보조 모델</a>
         <a class="hover:text-on-surface transition-colors" href="#hardware">하드웨어</a>
+        <a class="hover:text-on-surface transition-colors" href="#engine">추론 엔진</a>
         <a class="hover:text-on-surface transition-colors" href="#roi">도입 효과</a>
       </nav>
       <div class="flex items-center gap-2">
@@ -2066,6 +2067,194 @@ model.train(data="ppe.yaml", epochs=100, imgsz=640, seed=0)</code></pre>
                 <span class="material-symbols-outlined text-primary">battery_charging_full</span>
                 <span><b class="text-on-surface">여유를 둔 이유</b>: 경사로 주행, 저온 환경, 배터리 노화로 실제 사용 가능 용량이 줄어드는 것을 고려해 약 60% 여유를 두었습니다.</span>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 추론 엔진 선정 (report/engine_report.md) ===== -->
+    <section id="engine" class="py-20 lg:py-28 bg-surface-container">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-10">
+          <span class="label text-tertiary-container">INFERENCE ENGINE</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">라즈베리파이 추론 엔진은<br class="hidden sm:block"> NCNN으로 정했습니다</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">같은 <code class="font-mono text-base">yolo26n</code> 모델(640×640, FP32)을 ONNX Runtime, NCNN, OpenVINO, LiteRT(TFLite) 4개 엔진으로 변환해 정확도·용량·속도를 비교했습니다. 정확도와 용량은 네 엔진이 같아서, <strong class="text-on-surface">라즈베리파이 5에서 가장 빠른 NCNN</strong>(67 ms/장)을 배포 엔진으로 선택합니다. 최종 확정은 실기기 측정 후에 합니다.</p>
+          <p class="mt-3 label text-on-surface-variant">라즈베리파이 추론 엔진 선정 보고서 · 2026-10-15</p>
+        </div>
+
+        <!-- 섹션 내 목차 -->
+        <nav class="flex flex-wrap gap-2 text-sm" aria-label="추론 엔진 목차">
+          <a href="#engine-summary" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">결론 요약</a>
+          <a href="#engine-accuracy" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">정확도 · 용량</a>
+          <a href="#engine-speed" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">속도 비교</a>
+          <a href="#engine-fit" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">엔진별 적합성</a>
+          <a href="#engine-next" class="px-3 py-1.5 bg-surface rounded-full shadow-sm hover:bg-surface-container-high transition-colors">실기기 검증 · 한계</a>
+        </nav>
+
+        <!-- 1. 결론 요약 -->
+        <div id="engine-summary" class="mt-16">
+          <span class="label text-on-surface-variant">01 · SUMMARY</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">정확도는 같고, 속도에서 갈렸습니다</h3>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div class="p-6 bg-primary text-on-primary rounded-xl shadow-md">
+              <span class="label text-tertiary-fixed">선정 엔진</span>
+              <p class="font-display text-3xl font-bold mt-1">NCNN</p>
+              <p class="mt-2 text-sm text-primary-fixed">ARM CPU에 최적화된 엔진. Ultralytics 공식 가이드도 라즈베리파이에 권장합니다.</p>
+            </div>
+            <div class="p-6 bg-surface rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">Pi 5 추론 시간</span>
+              <p class="font-display text-3xl font-bold text-primary mt-1">67 ms</p>
+              <p class="mt-2 text-sm text-on-surface-variant">2위 OpenVINO(105 ms)보다 약 36% 빠릅니다.</p>
+            </div>
+            <div class="p-6 bg-surface rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">정확도 (mAP50-95)</span>
+              <p class="font-display text-3xl font-bold text-primary mt-1">0.4772</p>
+              <p class="mt-2 text-sm text-on-surface-variant">네 엔진 모두 PyTorch 원본과 같습니다. 변환 손실이 없습니다.</p>
+            </div>
+            <div class="p-6 bg-surface rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">모델 용량</span>
+              <p class="font-display text-3xl font-bold text-primary mt-1">9.76 MB</p>
+              <p class="mt-2 text-sm text-on-surface-variant">네 엔진 모두 9.8~10.1 MB로 차이가 거의 없습니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 정확도 · 용량 -->
+        <div id="engine-accuracy" class="mt-16">
+          <span class="label text-on-surface-variant">02 · ACCURACY &amp; SIZE</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">변환해도 정확도 손실이 없습니다</h3>
+          <p class="text-on-surface-variant mb-6">COCO128(이미지 128장, 정답 박스 929개)에서 같은 조건(640×640 레터박스, <code class="font-mono">batch=1</code>)으로 평가했습니다. 출력 오차는 0.004픽셀 이하로, float32 계산 방식 차이 수준입니다.</p>
+          <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[560px] text-left text-sm">
+                <thead><tr class="bg-surface-container label"><th class="p-2.5">엔진</th><th class="p-2.5">용량 (MB)</th><th class="p-2.5">mAP50</th><th class="p-2.5">mAP50-95</th><th class="p-2.5">출력 최대 오차 (픽셀)</th></tr></thead>
+                <tbody class="divide-y divide-outline-variant/40">
+                  <tr><td class="p-2.5 font-semibold">PyTorch (기준)</td><td class="p-2.5">5.54</td><td class="p-2.5">0.6428</td><td class="p-2.5">0.4772</td><td class="p-2.5">0</td></tr>
+                  <tr><td class="p-2.5 font-semibold">ONNX Runtime</td><td class="p-2.5">9.93</td><td class="p-2.5">0.6428</td><td class="p-2.5">0.4772</td><td class="p-2.5">3.11e-03</td></tr>
+                  <tr class="bg-surface-container-low"><td class="p-2.5 font-semibold text-primary">NCNN</td><td class="p-2.5">9.76</td><td class="p-2.5">0.6428</td><td class="p-2.5">0.4772</td><td class="p-2.5">3.63e-03</td></tr>
+                  <tr><td class="p-2.5 font-semibold">OpenVINO</td><td class="p-2.5">10.09</td><td class="p-2.5">0.6428</td><td class="p-2.5">0.4772</td><td class="p-2.5">2.56e-03</td></tr>
+                  <tr><td class="p-2.5 font-semibold">LiteRT (TFLite)</td><td class="p-2.5">9.97</td><td class="p-2.5">0.6428</td><td class="p-2.5">0.4772</td><td class="p-2.5">3.65e-03</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="mt-4 text-xs text-on-surface-variant"><code class="font-mono">.pt</code>가 절반 크기인 이유는 가중치를 FP16으로 저장하기 때문입니다. 변환한 모델은 모두 FP32입니다. 더 줄이려면 FP16·INT8 양자화를 검토하되, 정확도를 다시 검증해야 합니다.</p>
+          </div>
+        </div>
+
+        <!-- 3. 속도 비교 -->
+        <div id="engine-speed" class="mt-16">
+          <span class="label text-on-surface-variant">03 · SPEED</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">개발 PC와 라즈베리파이에서 순위가 뒤집혔습니다</h3>
+          <p class="text-on-surface-variant mb-6">x86에서 가장 느렸던 NCNN이 라즈베리파이 5에서는 가장 빠릅니다. 엔진마다 최적화한 CPU가 다르므로, <b class="text-on-surface">x86 결과로 라즈베리파이용 엔진을 고르면 안 됩니다.</b> 추론 시간에는 전처리·NMS가 포함되지 않습니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold">라즈베리파이 5 (Ultralytics 공식 벤치마크)</h4>
+              <p class="text-sm text-on-surface-variant mt-1 mb-5">yolo26n · FP32 · 입력 640 · ms/장 (짧을수록 빠름)</p>
+              <ul class="space-y-4 text-sm" aria-label="라즈베리파이 5 엔진별 추론 시간">
+                <li>
+                  <div class="flex justify-between mb-1"><span class="font-semibold text-primary">NCNN</span><span class="font-mono font-semibold text-primary">67.03 ms</span></div>
+                  <div class="h-3 bg-surface-container rounded-full overflow-hidden"><div class="h-full bg-primary rounded-full" style="width: 53%"></div></div>
+                </li>
+                <li>
+                  <div class="flex justify-between mb-1"><span>OpenVINO</span><span class="font-mono">104.55 ms</span></div>
+                  <div class="h-3 bg-surface-container rounded-full overflow-hidden"><div class="h-full bg-outline rounded-full" style="width: 83%"></div></div>
+                </li>
+                <li>
+                  <div class="flex justify-between mb-1"><span>LiteRT</span><span class="font-mono">123.30 ms</span></div>
+                  <div class="h-3 bg-surface-container rounded-full overflow-hidden"><div class="h-full bg-outline rounded-full" style="width: 98%"></div></div>
+                </li>
+                <li>
+                  <div class="flex justify-between mb-1"><span>ONNX</span><span class="font-mono">125.99 ms</span></div>
+                  <div class="h-3 bg-surface-container rounded-full overflow-hidden"><div class="h-full bg-outline rounded-full" style="width: 100%"></div></div>
+                </li>
+              </ul>
+              <p class="mt-5 text-xs text-on-surface-variant">참고: PyTorch 299.09 ms. 출처: <a class="underline" href="https://docs.ultralytics.com/guides/raspberry-pi/" target="_blank" rel="noopener">Ultralytics Raspberry Pi 가이드</a> (2026-10-15 확인)</p>
+            </div>
+            <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold">x86 컨테이너 (직접 측정)</h4>
+              <p class="text-sm text-on-surface-variant mt-1 mb-5">Intel Core Ultra 5 125H · CPU 4개 · 128장 · ms</p>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[380px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">엔진</th><th class="p-2.5">p50</th><th class="p-2.5">p95</th><th class="p-2.5">최대</th><th class="p-2.5">FPS</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-semibold">LiteRT</td><td class="p-2.5">53.8</td><td class="p-2.5">64.5</td><td class="p-2.5">76.2</td><td class="p-2.5">18.6</td></tr>
+                    <tr><td class="p-2.5 font-semibold">ONNX Runtime</td><td class="p-2.5">56.5</td><td class="p-2.5">64.6</td><td class="p-2.5">148.4</td><td class="p-2.5">17.7</td></tr>
+                    <tr><td class="p-2.5 font-semibold">OpenVINO</td><td class="p-2.5">68.2</td><td class="p-2.5">77.4</td><td class="p-2.5">94.6</td><td class="p-2.5">14.7</td></tr>
+                    <tr class="bg-surface-container-low"><td class="p-2.5 font-semibold text-primary">NCNN</td><td class="p-2.5">82.3</td><td class="p-2.5">96.7</td><td class="p-2.5">141.0</td><td class="p-2.5">12.2</td></tr>
+                    <tr><td class="p-2.5 font-semibold text-on-surface-variant">PyTorch (기준)</td><td class="p-2.5">118.4</td><td class="p-2.5">131.3</td><td class="p-2.5">167.1</td><td class="p-2.5">8.4</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="mt-4 text-xs text-on-surface-variant">LiteRT와 ONNX Runtime의 p50 차이(2.7 ms)는 반복 측정 편차보다 작아 사실상 동률입니다. NCNN은 ARM 최적화가 중심이라 x86에서는 가장 느렸습니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. 엔진별 적합성 -->
+        <div id="engine-fit" class="mt-16">
+          <span class="label text-on-surface-variant">04 · RASPBERRY PI FIT</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">엔진별 라즈베리파이 적합성</h3>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div class="flex flex-col p-6 bg-primary text-on-primary rounded-xl shadow-md">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-xl font-bold">NCNN</h4>
+                <span class="label px-2 py-0.5 rounded bg-tertiary-fixed text-tertiary">채택 · 1순위</span>
+              </div>
+              <p class="mt-3 text-sm text-primary-fixed leading-relaxed">ARM NEON 최적화가 중심인 엔진입니다. 라즈베리파이 5에서 67 ms로 가장 빠르고, 의존성이 가볍습니다.</p>
+              <p class="mt-auto pt-4 text-sm text-primary-fixed border-t border-primary-fixed/20"><b class="text-on-primary">주의</b> — x86에서는 가장 느렸습니다. 개발 PC 속도로 판단하면 안 됩니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-xl font-bold">OpenVINO</h4>
+                <span class="label px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">차선 · 중간</span>
+              </div>
+              <p class="mt-3 text-sm text-on-surface-variant leading-relaxed">라즈베리파이 5에서 105 ms로 2위입니다. ARM CPU 플러그인이 있습니다.</p>
+              <p class="mt-auto pt-4 text-sm text-on-surface-variant border-t border-outline-variant/40"><b class="text-on-surface">주의</b> — Intel 하드웨어 중심 엔진이고, 패키지가 무겁습니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-xl font-bold">LiteRT</h4>
+                <span class="label px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">차선 · 중간</span>
+              </div>
+              <p class="mt-3 text-sm text-on-surface-variant leading-relaxed">라즈베리파이 5에서 123 ms입니다. 런타임이 가볍고, x86에서는 가장 빠르고 안정적이었습니다.</p>
+              <p class="mt-auto pt-4 text-sm text-on-surface-variant border-t border-outline-variant/40"><b class="text-on-surface">주의</b> — 변환은 Linux x86·macOS에서만 되고, 변환 도구 설치에 약 14분이 걸렸습니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-surface rounded-xl shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-xl font-bold">ONNX Runtime</h4>
+                <span class="label px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">비교 기준</span>
+              </div>
+              <p class="mt-3 text-sm text-on-surface-variant leading-relaxed">라즈베리파이 5에서 126 ms입니다. 기존 코드(<code class="font-mono">test_onnx.py</code>, <code class="font-mono">benchmark_onnx.py</code>)를 그대로 쓸 수 있어 baseline으로 함께 잽니다.</p>
+              <p class="mt-auto pt-4 text-sm text-on-surface-variant border-t border-outline-variant/40"><b class="text-on-surface">주의</b> — 기본 설정은 스레드를 과하게 만듭니다. <code class="font-mono">intra_op_num_threads=4</code>를 꼭 지정합니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. 실기기 검증 · 한계 -->
+        <div id="engine-next" class="mt-16">
+          <span class="label text-on-surface-variant">05 · NEXT STEPS &amp; LIMITS</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">실기기에서 확정합니다</h3>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">실기기 검증 계획</h4>
+              <ol class="space-y-4 text-sm">
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">1</span><div><p class="font-semibold">패키지 설치</p><p class="text-on-surface-variant mt-0.5">라즈베리파이 64비트 OS에 <code class="font-mono">requirements.txt</code> 패키지를 설치합니다.</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">2</span><div><p class="font-semibold">변환 모델 복사</p><p class="text-on-surface-variant mt-0.5"><code class="font-mono">yolo26n.onnx</code>, <code class="font-mono">yolo26n_ncnn_model/</code>, <code class="font-mono">yolo26n_openvino_model/</code>, <code class="font-mono">yolo26n.tflite</code></p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">3</span><div><p class="font-semibold">실제 속도 측정</p><p class="text-on-surface-variant mt-0.5"><code class="font-mono">python compare_engines.py --threads 4</code></p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">4</span><div><p class="font-semibold">발열(스로틀링) 확인</p><p class="text-on-surface-variant mt-0.5">5분 이상 연속 추론하며 p95와 최대값 변화를 봅니다.</p></div></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary-container text-on-primary font-display font-bold flex items-center justify-center">5</span><div><p class="font-semibold">목표 미달 시</p><p class="text-on-surface-variant mt-0.5">입력 크기 축소(640 → 480 또는 320), FP16·INT8 양자화(정확도 재검증 필요)를 검토합니다.</p></div></li>
+              </ol>
+            </div>
+            <div class="bg-surface rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">한계와 유의사항</h4>
+              <ul class="space-y-3 text-sm text-on-surface-variant">
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">info</span><span><b class="text-on-surface">ARM64 컨테이너는 QEMU 에뮬레이션</b>이라 속도 수치가 실제 라즈베리파이 성능을 나타내지 않습니다. 동작·정확도 확인(<code class="font-mono">.pt</code>↔<code class="font-mono">.onnx</code> 최대 오차 0.0058픽셀, 탐지 결과 동일)에만 썼습니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">info</span><span><b class="text-on-surface">x86 속도는 한 번만 측정</b>했습니다. 전원 모드·발열에 따라 p95가 59~99 ms로 달라져, 순위 확정에는 반복 측정이 필요합니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">info</span><span><b class="text-on-surface">COCO128은 학습 이미지에서 뽑은 데이터</b>라 mAP가 실제보다 높을 수 있습니다. 엔진 간 상대 비교에는 문제없습니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">info</span><span><b class="text-on-surface">엔진 추론 시간만 측정</b>했습니다. 전처리(약 7 ms)와 NMS(약 3 ms)는 공통 비용이라 제외했습니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">info</span><span><b class="text-on-surface">공식 벤치마크는 라즈베리파이 5 기준</b>입니다. 라즈베리파이 4는 더 느리고, 순위도 실기기에서 다시 확인해야 합니다.</span></li>
+              </ul>
             </div>
           </div>
         </div>

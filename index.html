@@ -85,6 +85,7 @@
         <a class="hover:text-on-surface transition-colors" href="#vision">보조 모델</a>
         <a class="hover:text-on-surface transition-colors" href="#hardware">하드웨어</a>
         <a class="hover:text-on-surface transition-colors" href="#engine">추론 엔진</a>
+        <a class="hover:text-on-surface transition-colors" href="#sbc">SBC</a>
         <a class="hover:text-on-surface transition-colors" href="#roi">도입 효과</a>
       </nav>
       <div class="flex items-center gap-2">
@@ -2256,6 +2257,338 @@ model.train(data="ppe.yaml", epochs=100, imgsz=640, seed=0)</code></pre>
                 <li class="flex gap-2"><span class="material-symbols-outlined text-primary">info</span><span><b class="text-on-surface">공식 벤치마크는 라즈베리파이 5 기준</b>입니다. 라즈베리파이 4는 더 느리고, 순위도 실기기에서 다시 확인해야 합니다.</span></li>
               </ul>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SBC 내부 구조 · SBC/MCU 선정 (report/SBC.md) ===== -->
+    <section id="sbc" class="py-20 lg:py-28 bg-surface">
+      <div class="max-w-7xl mx-auto px-5 lg:px-16">
+        <div class="max-w-3xl mb-10">
+          <span class="label text-tertiary-container">SBC ARCHITECTURE</span>
+          <h2 class="font-display text-3xl lg:text-5xl font-bold text-primary tracking-tight mt-2 mb-4">두뇌는 Raspberry Pi 5,<br class="hidden sm:block"> 반사신경은 RoboClaw</h2>
+          <p class="text-lg text-on-surface-variant leading-relaxed">라즈베리파이 안의 소프트웨어를 <strong class="text-on-surface">역할별 5개 Docker 컨테이너</strong>로 나눠, 하나가 멈춰도 나머지는 계속 동작합니다. 영상 인식·경로 계획은 <strong class="text-on-surface">SBC(Pi 5 + AI HAT+)</strong>가, 모터 제어와 안전 정지는 <strong class="text-on-surface">RoboClaw 내장 MCU</strong>가 맡아 리눅스가 멈춰도 로봇은 안전하게 멈춥니다.</p>
+          <p class="mt-3 label text-on-surface-variant">SBC 내부 구조 및 SBC·MCU 선정 보고서 · Docker Compose · ROS 2</p>
+        </div>
+
+        <!-- 섹션 내 목차 -->
+        <nav class="flex flex-wrap gap-2 text-sm" aria-label="SBC 목차">
+          <a href="#sbc-containers" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">컨테이너 구조</a>
+          <a href="#sbc-topics" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">통신 토픽</a>
+          <a href="#sbc-flow" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">동작 흐름</a>
+          <a href="#sbc-fault" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">장애 대응 · Docker</a>
+          <a href="#sbc-select" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">SBC 선정</a>
+          <a href="#sbc-mcu" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">MCU 선정</a>
+          <a href="#sbc-roles" class="px-3 py-1.5 bg-surface-container-low rounded-full shadow-sm hover:bg-surface-container-high transition-colors">역할 분담</a>
+        </nav>
+
+        <!-- 1. 컨테이너 구조 -->
+        <div id="sbc-containers" class="mt-16">
+          <span class="label text-on-surface-variant">01 · CONTAINERS</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">역할에 따라 5개 컨테이너로 나눴습니다</h3>
+          <p class="text-on-surface-variant mb-6">기준은 <b class="text-on-surface">장애 격리</b>(비전 오류가 주행 안전에 영향 없음), <b class="text-on-surface">독립 배포</b>(모델 재학습 시 ③만 교체), <b class="text-on-surface">장치 접근 분리</b>, <b class="text-on-surface">통신 경계 구분</b>(로봇 내부는 ROS 2 토픽, 서버와는 MQTT)입니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="flex flex-col p-5 bg-primary text-on-primary rounded-xl shadow-md">
+              <span class="label text-tertiary-fixed">① HARDWARE</span>
+              <h4 class="font-display text-lg font-bold mt-1">하드웨어 드라이버</h4>
+              <ul class="mt-3 space-y-1.5 text-sm text-primary-fixed">
+                <li>/cmd_vel → RoboClaw 명령 (USB)</li>
+                <li>엔코더 → /odom, LiDAR → /scan</li>
+                <li>E-Stop(GPIO) → /estop, 배터리 → /battery</li>
+              </ul>
+              <p class="mt-auto pt-3 text-sm text-primary-fixed border-t border-primary-fixed/20"><b class="text-on-primary">안전 감시</b> — 속도 명령이 0.5초 끊기면 모터 정지</p>
+            </div>
+            <div class="flex flex-col p-5 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">② NAVIGATION</span>
+              <h4 class="font-display text-lg font-bold mt-1">자율주행</h4>
+              <ul class="mt-3 space-y-1.5 text-sm text-on-surface-variant">
+                <li>AMCL 위치 추정</li>
+                <li>Nav2 경로 계획 · 장애물 회피</li>
+                <li>순찰 상태 관리 → /patrol/state</li>
+              </ul>
+            </div>
+            <div class="flex flex-col p-5 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">③ VISION</span>
+              <h4 class="font-display text-lg font-bold mt-1">비전 판별</h4>
+              <ul class="mt-3 space-y-1.5 text-sm text-on-surface-variant">
+                <li>AI HAT+에서 YOLO (640×640)</li>
+                <li>ByteTrack 추적 · 포함률 판정</li>
+                <li>애매할 때만 MediaPipe Pose</li>
+              </ul>
+              <p class="mt-auto pt-3 text-sm text-on-surface-variant border-t border-outline-variant/40">연속 5프레임 미착용 → /ppe/violation · 이동 5 FPS / 스캔 15 FPS</p>
+            </div>
+            <div class="flex flex-col p-5 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">④ EVENTS</span>
+              <h4 class="font-display text-lg font-bold mt-1">이벤트 관리</h4>
+              <ul class="mt-3 space-y-1.5 text-sm text-on-surface-variant">
+                <li>위치·시각 부착, 얼굴 블러</li>
+                <li>같은 위치·작업자 10분 중복 억제</li>
+                <li>SQLite · microSD 저장</li>
+                <li>5초마다 상태 보고</li>
+              </ul>
+            </div>
+            <div class="flex flex-col p-5 bg-surface-container-low rounded-xl shadow-sm">
+              <span class="label text-on-surface-variant">⑤ BROKER</span>
+              <h4 class="font-display text-lg font-bold mt-1">MQTT 브로커</h4>
+              <ul class="mt-3 space-y-1.5 text-sm text-on-surface-variant">
+                <li>로컬 Mosquitto ↔ 서버 브리지</li>
+                <li>Wi-Fi 단절 시 디스크 보관 후 재전송</li>
+                <li>TLS 암호화</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="mt-5 bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+            <h4 class="font-display text-lg font-bold mb-4">② 자율주행의 순찰 상태</h4>
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[480px] text-left text-sm">
+                <thead><tr class="bg-surface-container label"><th class="p-2.5">순찰 상태</th><th class="p-2.5">동작</th></tr></thead>
+                <tbody class="divide-y divide-outline-variant/40">
+                  <tr><td class="p-2.5 font-semibold">이동 (PATROL)</td><td class="p-2.5">다음 웨이포인트로 이동</td></tr>
+                  <tr><td class="p-2.5 font-semibold">스캔 (SCANNING)</td><td class="p-2.5">웨이포인트에서 정지 후 제자리 회전하며 촬영</td></tr>
+                  <tr><td class="p-2.5 font-semibold">대기 (HOLD)</td><td class="p-2.5">미착용 감지 시 정지, 30초 후 재확인 결과를 기다림</td></tr>
+                  <tr><td class="p-2.5 font-semibold">복귀 (RETURN)</td><td class="p-2.5">배터리가 부족하면 출발 지점으로 이동</td></tr>
+                  <tr><td class="p-2.5 font-semibold">정지 (STOPPED)</td><td class="p-2.5">E-Stop이 눌리면 모든 동작 중단</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 통신 토픽 -->
+        <div id="sbc-topics" class="mt-16">
+          <span class="label text-on-surface-variant">02 · TOPICS</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">로봇 안은 ROS 2, 서버와는 MQTT</h3>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">ROS 2 토픽 (로봇 내부)</h4>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[460px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">토픽</th><th class="p-2.5">방향</th><th class="p-2.5">내용</th><th class="p-2.5">주기</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-mono">/scan</td><td class="p-2.5">① → ②</td><td class="p-2.5">LiDAR 거리 데이터</td><td class="p-2.5">10Hz</td></tr>
+                    <tr><td class="p-2.5 font-mono">/odom</td><td class="p-2.5">① → ②</td><td class="p-2.5">엔코더 주행 거리</td><td class="p-2.5">20Hz</td></tr>
+                    <tr><td class="p-2.5 font-mono">/battery</td><td class="p-2.5">① → ②④</td><td class="p-2.5">배터리 전압·잔량</td><td class="p-2.5">1Hz</td></tr>
+                    <tr><td class="p-2.5 font-mono">/estop</td><td class="p-2.5">① → ②④</td><td class="p-2.5">비상정지 상태</td><td class="p-2.5">변경 시</td></tr>
+                    <tr><td class="p-2.5 font-mono">/cmd_vel</td><td class="p-2.5">② → ①</td><td class="p-2.5">직진·회전 속도 명령</td><td class="p-2.5">10~20Hz</td></tr>
+                    <tr><td class="p-2.5 font-mono">/amcl_pose</td><td class="p-2.5">② → ④</td><td class="p-2.5">지도상 로봇 위치</td><td class="p-2.5">변경 시</td></tr>
+                    <tr><td class="p-2.5 font-mono">/patrol/state</td><td class="p-2.5">② → ③</td><td class="p-2.5">현재 순찰 상태</td><td class="p-2.5">변경 시</td></tr>
+                    <tr><td class="p-2.5 font-mono">/ppe/violation</td><td class="p-2.5">③ → ②④</td><td class="p-2.5">미착용 이벤트 (유형·신뢰도·추적 ID·사진·박스)</td><td class="p-2.5">발생 시</td></tr>
+                    <tr><td class="p-2.5 font-mono">/ppe/recheck</td><td class="p-2.5">③ → ②④</td><td class="p-2.5">30초 후 재확인 결과</td><td class="p-2.5">재확인 시</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">MQTT 토픽 (로봇 ↔ 서버)</h4>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[420px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">토픽</th><th class="p-2.5">방향</th><th class="p-2.5">내용</th><th class="p-2.5">QoS</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-mono">ppe/{로봇ID}/event</td><td class="p-2.5">로봇 → 서버</td><td class="p-2.5">미착용 이벤트, 증빙 사진</td><td class="p-2.5">1</td></tr>
+                    <tr><td class="p-2.5 font-mono">ppe/{로봇ID}/recheck</td><td class="p-2.5">로봇 → 서버</td><td class="p-2.5">재확인 결과</td><td class="p-2.5">1</td></tr>
+                    <tr><td class="p-2.5 font-mono">ppe/{로봇ID}/status</td><td class="p-2.5">로봇 → 서버</td><td class="p-2.5">위치, 배터리, 순찰 상태</td><td class="p-2.5">0</td></tr>
+                    <tr><td class="p-2.5 font-mono">ppe/{로봇ID}/command</td><td class="p-2.5">서버 → 로봇</td><td class="p-2.5">순찰 시작·중지, 점검 시간대 변경</td><td class="p-2.5">1</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="mt-4 text-xs text-on-surface-variant"><b>QoS 1</b>: 받는 쪽이 확인할 때까지 다시 보내 이벤트가 사라지지 않습니다. <b>QoS 0</b>: 한 번만 보내며, 곧 새 값이 오는 상태 정보에 씁니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. 동작 흐름 -->
+        <div id="sbc-flow" class="mt-16">
+          <span class="label text-on-surface-variant">03 · FLOW</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-6">미착용 감지부터 알림까지</h3>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">정상 흐름</h4>
+              <ol class="space-y-3 text-sm">
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">1</span><p class="text-on-surface-variant pt-1">② 자율주행이 웨이포인트에 도착해 상태를 <b class="text-on-surface">스캔</b>으로 바꿉니다.</p></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">2</span><p class="text-on-surface-variant pt-1">③ 비전 판별이 15 FPS로 올려 작업자를 검출·추적합니다.</p></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">3</span><p class="text-on-surface-variant pt-1">미착용이 연속 5프레임 이어지면 <code class="font-mono">/ppe/violation</code>을 보냅니다.</p></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">4</span><p class="text-on-surface-variant pt-1">②는 로봇을 <b class="text-on-surface">정지(대기)</b> 상태로 둡니다.</p></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">5</span><p class="text-on-surface-variant pt-1">④가 위치를 붙이고 얼굴을 블러 처리해 SQLite에 저장한 뒤 MQTT로 보냅니다.</p></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">6</span><p class="text-on-surface-variant pt-1">⑤가 서버로 전달하고, 서버가 관리자에게 알립니다.</p></li>
+                <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-primary text-on-primary font-display font-bold flex items-center justify-center">7</span><p class="text-on-surface-variant pt-1">30초 후 ③이 다시 판정해 <code class="font-mono">/ppe/recheck</code>로 보내고, ②는 순찰을 재개합니다.</p></li>
+              </ol>
+            </div>
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">Wi-Fi가 끊겼을 때</h4>
+              <ul class="space-y-3 text-sm text-on-surface-variant">
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">wifi_off</span><span>⑤ MQTT 브로커가 연결 끊김을 감지하고 메시지를 <b class="text-on-surface">디스크에 보관</b>합니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">route</span><span>순찰과 판정은 로봇 안에서 이뤄지므로 <b class="text-on-surface">계속 진행</b>합니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">sync</span><span>연결이 복구되면 ⑤가 보관한 메시지를 순서대로 서버에 보냅니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">database</span><span>④는 수신이 확인되지 않은 이벤트를 SQLite에 "미전송"으로 표시해 다시 보냅니다. <b class="text-on-surface">(2중 보관)</b></span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. 장애 대응 · Docker -->
+        <div id="sbc-fault" class="mt-16">
+          <span class="label text-on-surface-variant">04 · FAULT TOLERANCE &amp; DOCKER</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">어떤 컨테이너가 멈춰도 로봇은 폭주하지 않습니다</h3>
+          <p class="text-on-surface-variant mb-6">모든 컨테이너는 <b class="text-on-surface">항상 재시작</b> 정책이며, ⑤ → ① → ② → ③ → ④ 순서로 시작합니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">컨테이너가 멈췄을 때</h4>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[460px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">멈춘 컨테이너</th><th class="p-2.5">영향</th><th class="p-2.5">대응</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-semibold">① 하드웨어 드라이버</td><td class="p-2.5">모터 명령 끊김</td><td class="p-2.5">RoboClaw <b>시리얼 타임아웃</b>으로 모터 자동 정지</td></tr>
+                    <tr><td class="p-2.5 font-semibold">② 자율주행</td><td class="p-2.5">속도 명령 끊김</td><td class="p-2.5">①의 안전 감시가 0.5초 후 정지, 마지막 위치에서 재개</td></tr>
+                    <tr><td class="p-2.5 font-semibold">③ 비전 판별</td><td class="p-2.5">착용 판정 중단</td><td class="p-2.5">순찰 계속, ④가 "비전 중단"을 서버에 보고</td></tr>
+                    <tr><td class="p-2.5 font-semibold">④ 이벤트 관리</td><td class="p-2.5">기록·전송 중단</td><td class="p-2.5">서버가 상태 보고 끊김으로 이상 감지</td></tr>
+                    <tr><td class="p-2.5 font-semibold">⑤ MQTT 브로커</td><td class="p-2.5">서버 전송 중단</td><td class="p-2.5">④가 SQLite에 보관, 복구 후 재전송</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">Docker 실행 설정</h4>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[460px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">컨테이너</th><th class="p-2.5">연결 장치</th><th class="p-2.5">볼륨</th><th class="p-2.5">CPU</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-semibold">①</td><td class="p-2.5">USB 시리얼, GPIO</td><td class="p-2.5">—</td><td class="p-2.5">코어 0~1 (높음)</td></tr>
+                    <tr><td class="p-2.5 font-semibold">②</td><td class="p-2.5">—</td><td class="p-2.5">지도, 웨이포인트, 마지막 위치</td><td class="p-2.5">코어 0~1 (높음)</td></tr>
+                    <tr><td class="p-2.5 font-semibold">③</td><td class="p-2.5">카메라, AI HAT+</td><td class="p-2.5">AI 모델 파일</td><td class="p-2.5">코어 2~3</td></tr>
+                    <tr><td class="p-2.5 font-semibold">④</td><td class="p-2.5">—</td><td class="p-2.5">SQLite DB, 증빙 사진</td><td class="p-2.5">남는 자원</td></tr>
+                    <tr><td class="p-2.5 font-semibold">⑤</td><td class="p-2.5">—</td><td class="p-2.5">미전송 메시지</td><td class="p-2.5">남는 자원</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="mt-4 text-xs text-on-surface-variant">①~④는 호스트 네트워크와 같은 ROS 도메인 ID를 씁니다. 주행(①②)과 비전(③)의 코어를 나눠 AI 부하가 커져도 주행 제어가 늦어지지 않습니다. 새 YOLO 모델은 ③만 교체합니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. SBC 선정 -->
+        <div id="sbc-select" class="mt-16">
+          <span class="label text-on-surface-variant">05 · SBC SELECTION</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">SBC는 Raspberry Pi 5 + AI HAT+ (26 TOPS)</h3>
+          <p class="text-on-surface-variant mb-6">요구 조건은 리눅스·도커 필요, 상시 전원(매일 충전하는 770Wh 배터리), AI 연산 보통(카메라 1대, YOLO 15 FPS), SBC에 실시간 제어 불필요, Wi-Fi입니다. 8_5 피지컬 AI 부품 도감의 조건 조절기에 넣은 결과입니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div class="flex flex-col p-6 bg-primary text-on-primary rounded-xl shadow-md">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-lg font-bold">Pi 5 + AI HAT+</h4>
+                <span class="label px-2 py-0.5 rounded bg-tertiary-fixed text-tertiary">채택 · 1순위</span>
+              </div>
+              <p class="mt-3 text-sm text-primary-fixed leading-relaxed">AI 성능이 요구치에 딱 맞고 자료·생태계 점수가 가장 높습니다. NPU가 YOLO를 전담해 CPU는 Nav2에 집중합니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-lg font-bold">Jetson Orin Nano</h4>
+                <span class="label px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">2순위</span>
+              </div>
+              <p class="mt-3 text-sm text-on-surface-variant leading-relaxed">비전 성능은 가장 강하지만 가격이 Pi 5의 몇 배, 전력 7~25W. 카메라 1대에는 과한 사양입니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-lg font-bold">RK3588 보드</h4>
+                <span class="label px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">3순위</span>
+              </div>
+              <p class="mt-3 text-sm text-on-surface-variant leading-relaxed">가성비는 좋지만 자료가 부족하고 RKNN 모델 변환이 필요해 문제 해결에 시간이 걸립니다.</p>
+            </div>
+            <div class="flex flex-col p-6 bg-surface-container-low rounded-xl shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-display text-lg font-bold">Pi 5 단독</h4>
+                <span class="label px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">✕ AI 부족</span>
+              </div>
+              <p class="mt-3 text-sm text-on-surface-variant leading-relaxed">NPU가 없어 AI를 이미 자율주행에 쓰이는 CPU로 돌려야 합니다.</p>
+            </div>
+          </div>
+          <div class="mt-5 grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">SBC 사양</h4>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[400px] text-left text-sm">
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-semibold w-28">SBC</td><td class="p-2.5">Raspberry Pi 5 (8GB), Cortex-A76 4코어 2.4GHz</td></tr>
+                    <tr><td class="p-2.5 font-semibold">AI 가속기</td><td class="p-2.5">AI HAT+ 26 TOPS (Hailo-8), PCIe Gen 3</td></tr>
+                    <tr><td class="p-2.5 font-semibold">전원</td><td class="p-2.5">5V, 평균 약 2.6A / 피크 약 4.7A</td></tr>
+                    <tr><td class="p-2.5 font-semibold">연결 장치</td><td class="p-2.5">카메라(CSI), AI HAT+(PCIe), LiDAR·RoboClaw(USB), E-Stop(GPIO)</td></tr>
+                    <tr><td class="p-2.5 font-semibold">무선</td><td class="p-2.5">내장 Wi-Fi 5 (MQTT over TLS)</td></tr>
+                    <tr><td class="p-2.5 font-semibold">냉각</td><td class="p-2.5">액티브 쿨러 필수 (80°C 이상에서 성능 저하)</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">그 밖에 고르지 않은 후보</h4>
+              <ul class="space-y-3 text-sm text-on-surface-variant">
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">info</span><span><b class="text-on-surface">질문으로 고르기</b>의 결과는 Pi 5였지만, 단독으로는 YOLO 15 FPS가 어려워 NPU를 더한 AI HAT+를 최종 선택했습니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">info</span><span><b class="text-on-surface">Pi Zero 2 W</b> — RAM 512MB라 컨테이너 여러 개와 AI 모델을 올릴 수 없습니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">info</span><span><b class="text-on-surface">AI HAT+ 2 (40 TOPS)</b> — 8GB RAM은 LLM 실행용이라 불필요합니다. 비전 추론은 26 TOPS로 충분합니다.</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. MCU 선정 -->
+        <div id="sbc-mcu" class="mt-16">
+          <span class="label text-on-surface-variant">06 · MCU SELECTION</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">별도 MCU 대신 RoboClaw 2×15A의 내장 MCU</h3>
+          <p class="text-on-surface-variant mb-6">질문 트리로는 모터 정밀 제어용 <b class="text-on-surface">STM32</b>가 나오지만, RoboClaw는 모터 제어 전용 MCU가 내장돼 STM32로 직접 짜야 할 기능을 설정값만으로 제공합니다.</p>
+          <div class="grid grid-cols-1 [&>*]:min-w-0 lg:grid-cols-2 gap-5">
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">STM32 vs RoboClaw</h4>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[460px] text-left text-sm">
+                  <thead><tr class="bg-surface-container label"><th class="p-2.5">필요 기능</th><th class="p-2.5">STM32로 할 경우</th><th class="p-2.5">RoboClaw</th></tr></thead>
+                  <tbody class="divide-y divide-outline-variant/40">
+                    <tr><td class="p-2.5 font-semibold">엔코더 읽기</td><td class="p-2.5">타이머 설정, 펌웨어 작성</td><td class="p-2.5">직교 엔코더 2채널 내장</td></tr>
+                    <tr><td class="p-2.5 font-semibold">속도 PID</td><td class="p-2.5">PID 코드 작성·튜닝</td><td class="p-2.5">내장 (게인만 설정)</td></tr>
+                    <tr><td class="p-2.5 font-semibold">모터 구동</td><td class="p-2.5">별도 드라이버 필요</td><td class="p-2.5">2채널 내장 (연속 15A / 피크 30A)</td></tr>
+                    <tr><td class="p-2.5 font-semibold">전류 제한</td><td class="p-2.5">전류 센서 + 코드</td><td class="p-2.5">채널별 최대 전류 설정</td></tr>
+                    <tr><td class="p-2.5 font-semibold">가속 제한</td><td class="p-2.5">코드 작성</td><td class="p-2.5">가속도 값 설정</td></tr>
+                    <tr><td class="p-2.5 font-semibold">명령 끊김 시 정지</td><td class="p-2.5">워치독 코드</td><td class="p-2.5">시리얼 타임아웃 설정</td></tr>
+                    <tr><td class="p-2.5 font-semibold">배터리 전압</td><td class="p-2.5">ADC + 분압 회로</td><td class="p-2.5">내장 (Pi에서 읽기)</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+              <h4 class="font-display text-lg font-bold mb-4">설정값과 감수하는 점</h4>
+              <div class="grid grid-cols-3 gap-3 mb-5">
+                <div class="p-3 bg-surface rounded-lg"><span class="label text-on-surface-variant">최대 전류</span><p class="font-display text-xl font-bold text-primary mt-0.5">25A</p><p class="text-xs text-on-surface-variant">채널당</p></div>
+                <div class="p-3 bg-surface rounded-lg"><span class="label text-on-surface-variant">타임아웃</span><p class="font-display text-xl font-bold text-primary mt-0.5">0.5초</p><p class="text-xs text-on-surface-variant">시리얼</p></div>
+                <div class="p-3 bg-surface rounded-lg"><span class="label text-on-surface-variant">가속 제한</span><p class="font-display text-xl font-bold text-primary mt-0.5">0.5 m/s²</p><p class="text-xs text-on-surface-variant">상당</p></div>
+              </div>
+              <ul class="space-y-3 text-sm text-on-surface-variant">
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">payments</span><span><b class="text-on-surface">가격 약 20만 원</b> — MCU + 모터 드라이버 2개 + 개발 시간을 합치면 큰 차이가 아닙니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">lock</span><span><b class="text-on-surface">펌웨어 수정 불가</b> — PID, 전류 제한, 타임아웃이 모두 설정으로 제공됩니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">swap_horiz</span><span><b class="text-on-surface">채널 2개</b> — 4륜 스키드 스티어로 왼쪽 모터 2개는 채널 1, 오른쪽 2개는 채널 2에 연결합니다.</span></li>
+                <li class="flex gap-2"><span class="material-symbols-outlined text-primary">emergency</span><span><b class="text-on-surface">E-Stop 직접 처리 안 함</b> — 하드웨어 컨택터가 모터 전원을 차단하고, Pi는 GPIO로 상태만 감지합니다.</span></li>
+              </ul>
+              <p class="mt-4 text-xs text-on-surface-variant">Basicmicro RoboClaw 2×15A · 입력 6~34V (24V 배터리) · USB Packet Serial · 최대 전류 25A는 모터 2개 구속 시 40A로 피크 30A를 넘지 않도록 정한 값입니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 7. 역할 분담 -->
+        <div id="sbc-roles" class="mt-16">
+          <span class="label text-on-surface-variant">07 · BRAIN &amp; REFLEX</span>
+          <h3 class="font-display text-2xl lg:text-3xl font-bold text-primary mt-1 mb-2">상황별 두뇌와 반사신경의 역할</h3>
+          <p class="text-on-surface-variant mb-6">리눅스는 업데이트나 메모리 부족으로 멈출 수 있으므로, 모터 제어와 안전 기능은 SBC가 아닌 MCU에 맡깁니다.</p>
+          <div class="bg-surface-container-low rounded-xl shadow-sm p-5 lg:p-7">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[560px] text-left text-sm">
+                <thead><tr class="bg-surface-container label"><th class="p-2.5">상황</th><th class="p-2.5">SBC (Pi 5 + AI HAT+)</th><th class="p-2.5">MCU (RoboClaw)</th></tr></thead>
+                <tbody class="divide-y divide-outline-variant/40">
+                  <tr><td class="p-2.5 font-semibold">평상시 순찰</td><td class="p-2.5">경로 계산, 속도 명령 전송, 영상 인식</td><td class="p-2.5">속도 명령대로 PID 제어</td></tr>
+                  <tr><td class="p-2.5 font-semibold">미착용 감지</td><td class="p-2.5">정지 명령, 이벤트 생성, Wi-Fi 알림</td><td class="p-2.5">감속 후 정지</td></tr>
+                  <tr><td class="p-2.5 font-semibold">바퀴가 걸림</td><td class="p-2.5">전류 값을 읽고 경로 재계산</td><td class="p-2.5">전류를 25A로 제한해 모터·드라이버 보호</td></tr>
+                  <tr class="bg-surface-container"><td class="p-2.5 font-semibold">Pi가 멈춤</td><td class="p-2.5 text-on-surface-variant">(동작 불가)</td><td class="p-2.5 font-semibold text-primary">0.5초 후 시리얼 타임아웃으로 스스로 정지</td></tr>
+                  <tr><td class="p-2.5 font-semibold">E-Stop 누름</td><td class="p-2.5">GPIO로 감지해 기록</td><td class="p-2.5">컨택터가 전원을 끊어 즉시 정지</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="mt-4 text-xs text-on-surface-variant">확장 시 카메라를 여러 대로 늘리면 Jetson Orin Nano로, 모터 제어를 직접 구현하려면 STM32로 바꿀 수 있습니다.</p>
           </div>
         </div>
       </div>
